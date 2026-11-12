@@ -30,7 +30,11 @@ namespace StillHere
         public AudioProbe probe;
 
         /// True when an HRTF spatializer (Steam Audio) is active; otherwise sounds are panned and filtered.
+#if STEAMAUDIO_ENABLED && !UNITY_WEBGL
         public static bool Hrtf => AudioSettings.GetSpatializerPluginName().Contains("Steam Audio");
+#else
+        public static bool Hrtf => false;      // Steam Audio is not available here (e.g. web builds): pan + filter instead
+#endif
         public bool silent;                     // headless simulation: no sound, lines are only logged
         public float ambience = 1;              // faded to 0 at the ending
         public float master = 1;
@@ -63,6 +67,7 @@ namespace StillHere
                 string g = c.name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
                 if (g != c.name) { if (!groups.TryGetValue(g, out var l)) groups[g] = l = new List<string>(); l.Add(c.name); }
             }
+            { int rawN = 0; foreach (var l in audit) if (l.Contains("RAW") || l.Contains("EXCEPTION")) rawN++; Debug.Log($"[StillHere] audio ready: {sfx.Count} effects, {vo.Count} voice lines, hrtf={Hrtf}, unprepared clips={rawN}"); }
             self = Make2D("self", 0); selfL = Make2D("selfL", -0.22f); selfR = Make2D("selfR", 0.22f);
             voice = Make2D("voice", 0); voice.reverbZoneMix = 0.12f; voice.priority = 0;
             var rz = gameObject.AddComponent<AudioReverbZone>();   // one small tiled room
@@ -205,7 +210,7 @@ namespace StillHere
             s.rolloffMode = AudioRolloffMode.Custom; s.maxDistance = 30;
             s.SetCustomCurve(AudioSourceCurveType.CustomRolloff, AnimationCurve.Constant(0, 1, 1));   // distance handled in Spatialise
             var lp = g.AddComponent<AudioLowPassFilter>(); lp.cutoffFrequency = 22000;
-#if STEAMAUDIO_ENABLED
+#if STEAMAUDIO_ENABLED && !UNITY_WEBGL
             if (Hrtf)
             {   // true binaural rendering (Steam Audio): ear-to-ear timing, head shadow and outer-ear filtering
                 s.spatialize = true; s.spatializePostEffects = true;

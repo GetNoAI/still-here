@@ -30,6 +30,8 @@
 *.aab
 *.unitypackage
 *.app
+!/build_mac.app
+!/build_mac.app/**
 crashlytics-build.properties
 
 # OS
@@ -41,6 +43,7 @@ Thumbs.db
 /Assets/Realistic Cat Demo/
 /Assets/Realistic Cat Demo.meta
 
-# Local build output
-/stillhere_mobile/
+# Build leftovers (the builds themselves are committed: stillhere_mobile/, stillhere_desktop/, build_mac.app)
 /Data/
+/*_BackUpThisFolder_ButDontShipItWithYourGame/
+/*_BurstDebugInformation_DoNotShip/

@@ -1,9 +1,9 @@
-﻿{
+{
     "name": "SteamAudioUnity",
     "rootNamespace": "",
     "references": [],
     "includePlatforms": [],
-    "excludePlatforms": [],
+    "excludePlatforms": ["WebGL"],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],

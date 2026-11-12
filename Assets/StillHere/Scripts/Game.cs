@@ -111,7 +111,7 @@ namespace StillHere
             if (!poses) Debug.LogError("[StillHere] CatPoses asset missing: run StillHere > Bake Cat Poses");
             input.Enable();
 
-#if STEAMAUDIO_ENABLED
+#if STEAMAUDIO_ENABLED && !UNITY_WEBGL
             if (AudioDirector.Hrtf && SteamAudio.SteamAudioManager.Singleton != null) SteamAudio.SteamAudioManager.NotifyAudioListenerChangedTo(head.transform);
 #endif
             BuildKitchen();
@@ -159,7 +159,9 @@ namespace StillHere
         {
             if (started) return;
             started = true;
-            if (!manual) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; }
+            // Capture the mouse for looking around, except on phones and tablets: mobile browsers refuse pointer capture
+            // and Unity's web player treats that refusal as a fatal error.
+            if (!manual && !Application.isMobilePlatform && UnityEngine.InputSystem.Touchscreen.current == null) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; }
             StartAmbience();
             ambTarget = 1;
             SetStage("intro");
