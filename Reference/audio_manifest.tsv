@@ -1,0 +1,180 @@
+VO	intro_1	zjabgEwsNGcYh5k9BCAV	Mm...? Oh. It's you.
+SFX	meow_p1	FXIH5Ny7dUd3hfK4aKjI	pilot meow
+VO	intro_2	RxhjRSUFiVW98rUlWriB	Is it that time already?
+VO	hint_seat_1	3Kw47osTbX1iXUgWsoEp	Come on, then. Up we get.
+VO	hint_seat_2	KAqgZ3xSU2gfhGjSte0N	Alright, alright. I'm getting up.
+VO	hint_seat_3	KfPS1IHijYUjbW12Q3Zw	My poor knees... Come on. Up.
+VO	stand	x3rlLHYHSvWXIq6gjUP0	Oof... up we get.
+VO	hint_up_1	issi7OX7B73ZRzdHFdTE	What is it, Pudding? Hungry, are you?
+VO	hint_up_2	UBGMDcsACFpFvezFIMis	Your tea. Of course it is. Now... where are your tins.
+VO	hint_up_3	ZvzFFhjq74JpPVC2y3qI	The cupboard by the sink. Just past it, I think.
+VO	hint_up_4	Hd4nrMyMJTDfSW7Fs9C5	Listen... that tap. The sink's there. Your tins are in the next cupboard along.
+VO	hint_up_5	xQReik0qKktO0WaVdwKs	Follow her. She knows where they are.
+VO	hint_up_6	K3z9ewstGX9SbX6B2nuD	Past the sink. The next cupboard along. Open it up.
+VO	tin_take	lYUN2rzZZx2EXOXnEmnQ	Ah. Here we are. Fish. You can smell it, can't you?
+VO	biscuit_wake_1	o7ITkla4a6gFipHnrtp8	...Biscuit? Was that you? I thought you'd sleep till morning.
+VO	biscuit_wake_2	dvybB6J3ssxakJGktkGB	Two of you, then. Two bowls. Right.
+VO	hint_tin_1	dE7pZ95oDLMFUtkrGEsJ	Pudding eats by the back door. Where the draught comes in.
+VO	hint_tin_2	Csu1oT89cCJCwrKGAwET	And Biscuit by the radiator. He won't share, the old grump.
+VO	hint_tin_3	25vhpeg5mNJldiX8xH7c	Hear the rain on the glass? Her bowl's just there, on the floor by the door.
+VO	hint_tin_4	Ef2QldjWRDm7sRpS15G9	The radiator. Hear it ticking? His bowl's beside it, on the floor.
+VO	hint_tin_5	JrSaxgIb8WrqT5s47GFZ	Go on, you two. Show me.
+VO	fed_first_p	2Sp7Pb0aSO852umJuZAD	There we are, Pudding. Half for you.
+VO	fed_first_b	ZHGWsTn6JxJZjZuYieyk	There you go, Biscuit. Half for you, old man.
+VO	need_b	9PfP6xNmlW0OkK2d9UIl	Now yours, Biscuit. By the radiator.
+VO	need_p	WZjOXcaorxBssUZPczEQ	Now yours, Pudding. By the back door.
+VO	wrong_cat	xW5nHnqsST2sPRm5ToLe	Oi. That's not yours. Wait your turn.
+VO	fed_last	8qD7HhEBlthEukBZLyHI	[warmly] And the rest for you. There.
+VO	end_1	KAw0rsWW0hTGEbEOCFSV	[contented] Go on. Eat up, the pair of you.
+SFX	meow_p2	ze0eHSGMOVoVEGfmrKda	Single meow from a small young female cat, high pitched, insistent and demanding, close-mic, completely dry studio recording, no reverb, no background noise
+VO	end_2	ZRX18OtpQ7iWdMyoIvLK	[softly, after a pause] We're alright, aren't we? The three of us.
+VO	end_3	985VCVYda0F4XyW5DocZ	[very softly] ...Good cats.
+VO	table_1	DlTRvyR6ZHc6290S2n2k	The table.
+VO	table_2	kUKMH5Blr0Scb7yOQObJ	Table. Sticky.
+VO	glass_1	Wi55LxzzAnIhAPscRlmd	My glass of water.
+VO	glass_2	SD0MwCRaSBAWjl9OVkgJ	Careful with that.
+VO	glass_wobble	QSy3Y3ZcTpRQU5t9lgjU	[alarmed] Careful— my glass...
+VO	glass_smash_1	ViUSGUxVeERdKrBgtISO	[dismayed] Oh, no. No, no, no...
+VO	glass_smash_2	q5bD7Ho30Opp5YC7CGfv	[sighs] Glass everywhere now. Mind your feet.
+VO	glass_step	jyAuvT8Qptg0n9I1DgU9	[sharp, alarmed] Glass! Mind your feet, mind your feet...
+VO	chair_mine_1	ML9GN0UYzbE7bMFZ6KN3	My chair.
+VO	chair_mine_2	an63TYCnplsnPsTkOtDy	Still warm.
+VO	chair_other_1	pUgQWawm2RXgB8A6gvWm	The other chair.
+VO	chair_other_2	wvZpZq6cKFQWOnwOtigc	[wistful] Nobody sits there anymore.
+VO	chair_other_cat	wevaTdcq6NqXzHwl5y9H	[whispering] Oh... Biscuit. Fast asleep. Leave him be.
+VO	chair_other_empty	Amk6vzGEFttDdAXl2iWK	Still warm. So that's where he was hiding.
+VO	wall_1	o4652Nx3NDXmA2wSRvFM	Wall.
+VO	wall_2	5uQwq3EYBiL0O2QiXa8k	Just the wall.
+VO	wall_3	gBIqIcQh2kBUiDLYHg8F	The wallpaper's lifting there.
+VO	clock	vpseN2oRwxsQdo5IaXgC	The clock's up there somewhere. Can't reach it.
+VO	door_1	Nv1Bn5Xk4YVRmHeIZfbB	The back door. Feel that draught.
+VO	door_2	zaonHbpGiukGyN6YbczZ	Cold glass. Still raining.
+VO	flap	qLqWBn7FZVXFHJG4BY8p	The cat flap. They won't go out in this.
+VO	floor_1	f5ljh7erQm7ZnnF9MwZ5	The floor. Cold tiles.
+VO	rug_1	tGZjPGOn59Y9CsdOphq9	The rug.
+VO	worktop	TLC1aE3jYxXE3eIKQqU0	Worktop... cupboards underneath.
+VO	sink_1	CwkhTZ3czID5Fwah15Or	The sink. Cold.
+VO	sink_2	dUb6aThnKZhq7Onz6jUM	That tap. Drip, drip, drip.
+VO	cup_bump	KDKAHDnoIaSQhJU0WZgh	A cupboard.
+VO	cupA_open	fuD1T8VkPgfi5OkcbEbX	Pans cupboard.
+VO	cupA_feel	iZAw85fRmFTa4xxpMNnP	Pans. Just pans.
+VO	cupB_open	VSiInRyLim3mdzmT4GsH	Under the sink...
+VO	cupB_feel	uZwXF9aveH7G4zJD8b3j	Bleach... cloths. Not in here.
+VO	cupC_open	TWYo41RxBDSP0wE4kyvZ	Now then...
+VO	cupC_beans	RXhdm5J5NpT04AeBmM0k	Beans. Not beans...
+VO	cupC_more	Zhcrl0RXrfeP8NOFXVEp	More beans. Who eats all these beans?
+VO	cup_door_1	Qloq8B6nUXYIIovY2oj7	[pained] Ow— a door. Who left that open?
+VO	cup_door_2	cfqzgtmHkNyIWgjnET0S	[sheepish] ...Me. I did.
+VO	cup_shut	gmj8qiIrel3Mn2Dxi3AF	Shut that.
+VO	bread_1	61DCQLnoZuskRvEJBWsb	Bread bin.
+VO	bread_2	At2iXgEWjpW1Qh5H8OAy	Just bread. You don't like bread.
+VO	oven	OkrQ6FLism5NNWoCZ3Yg	The oven door. Cold, at least.
+VO	burn	RH68QxEeYBlbaC3oYvPl	[cries out in pain] Ah! Hot— hot!
+VO	kettle	Ewx40ipV2XK5E7JNGSOc	[puzzled] Was the kettle left on? I don't remember putting it on...
+VO	bin	EmfWjMuCqKNFwczgpFZm	The bin. Wants emptying.
+VO	fridge_1	sjJHb5g67B2s6ZRGdBRq	The fridge.
+VO	fridge_2	SCfP7YcwJhZ5kM459Qlg	Milk... butter. Nothing for you in here, madam.
+VO	fridge_3	qpVbbhfnG0ZdhnrVfrE8	Nothing in the fridge for you. I told you.
+VO	radiator	pgQqZKoN90IV3eJbkclE	Radiator. Barely warm.
+VO	bucket_1	1L5a3KQ5pmGIIl4Yv5AN	[startled] The mop bucket! Who left that there?
+VO	bucket_2	sJDnci3PnYmFouRTyidu	[sheepish] ...Me, probably.
+VO	bucket_r	mLwRgD1glSmBihAbQoIN	Mop bucket.
+VO	bowl_p_empty	k1u2cLR1TCx9mUUFFbwL	Her bowl. Empty. Licked clean.
+VO	bowl_b_empty	n7J5yM3cqJjfRwe5G3xn	His bowl. Empty, of course.
+VO	bowl_generic	FOeKCwpnsVmLCpZV0fgJ	I know, I know.
+VO	bowl_kick	mcx2uu4DD0JwKtyUPDHK	A bowl— under my foot.
+VO	bowl_full	8t9IkXwPultXaMh9lmCa	Leave them to it.
+VO	water_1	Ty5FXkPdMphWLG8HFcwk	Water bowl. Still got water.
+VO	water_spill	3sknZbP8nT23wgrBI7ji	[annoyed] Oh, blast. The water.
+VO	water_empty	0tsHxeMiM8haD1WWKCFo	The water bowl. Empty now.
+VO	nothing_1	gSlLs1ZzhGS7Bg8b0ftY	Nothing there.
+VO	nothing_2	pEovVJtXhFciVh70v9i6	Hm. Nothing.
+VO	rub_1	ZbHGur42wu096XdIqDSV	Yes, I know.
+VO	rub_2	s7cab72grwDo8eO1wGMS	Alright, alright.
+VO	rub_3	AS6jpvGSoIfCGX1OKF8d	Mind my legs, you.
+VO	rub_4	Pzgyczo7kB4Iwt2hpkGu	[fondly] Hello, sweetheart.
+VO	stroke_p_1	Brjd8sMLyGM2vEJ8t8tx	[fondly] There she is.
+VO	stroke_p_2	iNgMopKBNb4t7fmgIW93	Good girl.
+VO	stroke_b_1	z6oU4IzgK29lEBKDnMcy	[fondly] Hello, old man.
+VO	stroke_b_2	zDsR9XYKjfbySEuLFgRj	Big lump.
+VO	under_1	xHAm1G9SL4JXqpVcfdVX	[alarmed] Pudding! You'll have me over!
+VO	under_2	ggbO8vKmVAeZZ3ynFj12	[sharp] Get from under my feet!
+VO	under_3	NrVi3Fo6vnZAFgMTOO1U	[alarmed] Biscuit! Mind!
+VO	stumble_1	EAqO3MNlIItvct5gXC2P	[alarmed] Whoa— steady. Steady...
+VO	stumble_2	h8iJqR4eVH9Gi83nTDwm	[breathless] Steady...
+VO	stumble_3	s4rSMq1MtUHcmTal14ns	Careful.
+VO	wet_1	RZBKbNGC9dD1Cn1obYE9	[alarmed] Whoa— wet. The sink's leaking again.
+VO	wet_2	9k5CAUAoyivr4LSSs3p6	Wet. Careful.
+VO	fall_1a	kttgreXxw7Ar2l4PoiAk	[groaning, shaken] Oh— oh dear. Oh dear...
+VO	fall_1b	guHPczY5nKmEaMqwPU7f	[gathering himself] Come on. Up you get, you silly old thing.
+VO	fall_2a	JVmfIRe6yadPeO6Unw3F	[shaken] Not again... not again.
+VO	fall_2b	TvSsd5JiNMtASpVDESNn	Up. Come on. Up.
+VO	fall_3a	SrIdr2gtkOeacnNEb70l	[weakly] I'm alright. I'm alright.
+VO	fall_3b	FKvMeBCJwMG1xiIUee3T	Slowly. Slowly does it.
+VO	ow_1	zXbHWtdWlCDvEii80l3E	[winces] Ow.
+VO	ow_2	Dxi1UxNIPm3AppjnFJHk	[winces] Ooh, my hip.
+VO	slowly	ZdmgYrcQMBUaDusHUPC0	Slowly does it...
+SFX	meow_p3	HLFIlwZvqKxx778cyYZm	Short questioning chirp-trill "mrrp" from a small cat, friendly greeting, close-mic, dry, no reverb, no background
+SFX	meow_p4	Wb6SpNjVoYe5BndrJmn5	Single long pleading meow from a small female cat begging for food, close-mic, dry, no reverb, no background
+SFX	meow_b1	EiGRHITpXAPEwgJVqYfR	Single deep gruff meow from a big old tomcat, low pitched and raspy, close-mic, completely dry, no reverb, no background
+SFX	meow_b2	s7vhNi4f0FXVtDcJ5hGi	Single long grumbling demanding low meow from a large old male cat, hoarse, close-mic, dry, no reverb, no background
+SFX	meow_b3	5j7Ceim3rpiS0g6HJ9pv	Short low sleepy grunt-like chirp from a big old cat just waking up, close-mic, dry, no reverb
+SFX	yowl	Did1bm5zME0IxruPuInq	Cat yowling in sudden startled pain when its tail is stepped on, short sharp screech, close-mic, dry, no reverb
+SFX	hiss	oT64qLBEFh4FVckzCOpA	Cat hissing and spitting once, short, close-mic, dry, no reverb, no background
+SFX	purr_p	PCl1M1S1mQzymPTtR0Tq	Small cat purring steadily and contentedly, even rhythm, close-mic, dry, no other sounds
+SFX	purr_b	ugt4huBEEGxQKlQaBkx7	Large old cat purring, deep slow rumbling purr, close-mic, dry, no other sounds
+SFX	bell_p	l3VFWthBgdSUjhSf3f2O	Tiny cat collar bell jingling once, bright light tinkle, close-mic, dry, no reverb
+SFX	bell_p2	1IUx7DRG8Z6iyn8yfTlX	Tiny cat collar bell, two quick light jingles, bright, close-mic, dry, no reverb
+SFX	bell_b	49L8WmPnljZKnEy9CLK9	Small metal pet ID tag clinking once against a collar buckle, dull low clink, close-mic, dry, no reverb
+SFX	cat_eat	1ObFW2Fo1nuoHF5zQpbW	Cat eating wet food from a ceramic bowl, wet lapping and chewing, close-mic, dry, steady, no other sounds
+SFX	cat_land	xOoLBLDzYDDCnFqHUDG4	Cat jumping down from a chair onto a tiled floor, soft double thump of paws, close-mic, dry
+SFX	snore	Dqn8qKa2Jf36nXC8fpsT	Cat sleeping, soft slow snoring breaths, very quiet, close-mic, dry, no other sounds
+SFX	fur	l89R3WcHmREKpyoj29lV	Hand stroking soft cat fur, gentle brushing rustle, close-mic, dry
+SFX	step_tile1	X7eP34QTaHdVxpxSpu8t	One single shuffling slipper footstep on a ceramic tile floor, soft scuff, close-mic, dry, no reverb
+SFX	step_tile2	pRAbAgWaF4GVGszbw1MB	One single slow slipper footstep on hard kitchen tiles, soft pad and slight drag, close-mic, dry, no reverb
+SFX	step_tile3	4nuVXrv25lZlqxMtf3no	One single soft slipper footstep on tile, quiet shuffle, close-mic, dry, no reverb
+SFX	step_rug1	ducI9nH3qHpvWYmcXAfL	One single slipper footstep on a thick rug, muffled soft thump, close-mic, dry
+SFX	step_rug2	NYG63KLnNaDopGcIgdA4	One single muffled footstep on carpet, soft and dull, close-mic, dry
+SFX	step_wet	upZijgBkwPzGlKh5UNdo	One single footstep into a shallow puddle on a tile floor, small wet splash, close-mic, dry
+SFX	step_glass	wOrHrPHaQB8G68Wt7kLV	One single footstep crunching on broken glass shards on a tile floor, close-mic, dry
+SFX	knock_wood	IHuHl3Sf9fsCkxmP3wTU	Hip bumping into a wooden table once, dull wooden knock and slight rattle, close-mic, dry, no reverb
+SFX	bump_soft	PAHyrdODx5KLn56aeDpv	Body bumping into a solid kitchen cabinet, dull low thud, close-mic, dry, no reverb
+SFX	pat_wall	4wdAvx3gq1ysvx7kP9vn	Flat palm patting a plastered wall once, soft slap, close-mic, dry, no reverb
+SFX	reach	wYYz5VQheWqDu3kP7lNt	Sleeve fabric rustling as an arm reaches out, short soft cloth movement, close-mic, dry
+SFX	hand_wood	rkIYVCosOZCGuD5v6UHy	Fingertips tapping and brushing a wooden surface, light touch, short, close-mic, dry
+SFX	hand_metal	dhWqPgTizaFWQdHdWEwY	Fingertips tapping a hollow metal appliance door once, light metallic tap, close-mic, dry
+SFX	creak_open	IbjdmhSlOc3Uav3dHOVI	Old wooden kitchen cupboard door creaking open, short hinge squeak, close-mic, dry, no reverb
+SFX	creak_close	NWmBMx9jRrE6LA0Sb5w0	Wooden cupboard door closing with a soft knock, close-mic, dry, no reverb
+SFX	rummage	838hjt6kSFvVsRF640oj	Hand rummaging among tins and packets inside a cupboard, short, close-mic, dry
+SFX	pans	4LKeZbFEuqtgxRHOopM4	Saucepans clanking together inside a cupboard, short metallic clatter, close-mic, dry
+SFX	tin_pick	myyU4af1XLpWsGQ9Hk9n	Picking up a metal food tin from a shelf, small metallic clink and slide, close-mic, dry
+SFX	ring_pull	gfQY8tiR5IDA0Ab5YE79	Ring-pull tin can being opened, crack then peel of the metal lid, close-mic, dry
+SFX	scoop	C81tmrEeIA8BMs48kJCW	Wet cat food being scooped out of a tin with a fork into a ceramic bowl, squelch and clink, close-mic, dry
+SFX	bowl_clink	LT1V9tWseaqgdZm6UE0g	Ceramic pet bowl nudged on a tile floor, short scrape and clink, close-mic, dry
+SFX	glass_clink	YvSywJ2TQ7B6biIak4H0	Drinking glass wobbling and clinking on a wooden table, short, close-mic, dry
+SFX	glass_smash	euNb4iYV9ORaKKbJ2lbJ	Drinking glass falling and smashing on a tiled kitchen floor, sharp bright shatter, close-mic, dry
+SFX	bucket	o8jMWMBQjpwXTK7BhFyZ	Metal mop bucket kicked by a foot, hollow metallic clang and handle rattle, close-mic, dry
+SFX	bin	yFz0z0lwR7eSruJ5o1OQ	Foot knocking a metal pedal bin, short hollow clank, close-mic, dry
+SFX	water_spill	RhGDQdUEhmbamiDXsSTD	Small bowl of water knocked over on a tile floor, splash and ceramic clatter, close-mic, dry
+SFX	fall	2quMd1GqKafIWIJ4D04X	Person falling heavily onto a kitchen floor, heavy body thud, close-mic, dry, no voice
+SFX	sizzle	hDBRjSKmTiZsKinQLlM1	Brief sharp sizzle of skin touching a hot stove hob, short, close-mic, dry
+SFX	chair_scrape	TjKytUtXjpahxUwFrsAb	Wooden chair pushed back, legs scraping on a floor, short, close-mic, dry
+SFX	knees	JbGPmkkfvwnz3cfbGZj2	Old knee joints cracking, two or three small dry cracks, close-mic, dry
+SFX	fridge_open	Qimq5EbYoe9cNngKYIFJ	Fridge door opening, rubber seal pop and bottles rattling, close-mic, dry
+SFX	fridge_close	0D9REXOmLXOahLucYR6d	Fridge door closing, soft sealed thump, close-mic, dry
+SFX	heartbeat	0qFihLnwm3ZpDZn1mrLk	Slow heavy human heartbeat, deep low thumps, steady, close, dry
+SFX	breath	IEjnLSF2psxy3ios8DEw	Elderly man breathing heavily and shakily, recovering his breath, close-mic, dry, no words
+SFX	fridge_hum	BVO2kXAsfACVE3NTx0uo	Old refrigerator compressor humming steadily, low electrical drone, constant, close-mic, no other sounds
+SFX	clock	G2ZuevMU3FaEdNzHF872	Wall clock ticking steadily, one tick per second, close-mic, dry, no other sounds
+SFX	drip	gW0qaVi1s2NSd3PpL7Qx	Kitchen tap dripping slowly into a steel sink, single drops about every two seconds, close-mic, dry
+SFX	rain	ZHSxOK9apBdD4RyM2vux	Steady rain pattering against a window pane, heard from indoors close to the glass, constant
+SFX	draught	eYk5dk3FP2jAqE6JxHMv	Cold wind whistling softly through the gap under a door, low moaning draught, constant
+SFX	kettle	R3PI4An1ebaCQrt6B69T	Kettle gently simmering on a stove, soft hiss and faint bubbling, constant, close-mic
+SFX	radiator	faC8ZMhKD0yM9VssYxX5	Old radiator ticking and gurgling as pipes warm, occasional metallic ticks and soft gurgle, close-mic, dry
+SFX	rain	CiD8j45WCHUK4UfGC7rp	long seamless loop (regenerated with duration + loop)
+SFX	draught	lCMn2ywnZrbzUzOLZHfQ	long seamless loop (regenerated with duration + loop)
+SFX	kettle	6aH4SY6kpjl3mycrhU9l	long seamless loop (regenerated with duration + loop)
+SFX	fridge_hum	TLsCZnkufK4hfv30Fd4G	long seamless loop (regenerated with duration + loop)
+SFX	purr_p	u3SiHI4zNbkNwJ0TTfSV	long seamless loop (regenerated with duration + loop)
+SFX	purr_b	3xGVgGG22rIJHz0rzF08	long seamless loop (regenerated with duration + loop)
+SFX	snore	wnQq9YNNn99PhhsYktOU	long seamless loop (regenerated with duration + loop)

@@ -1,0 +1,147 @@
+VO	fed_last	[warmly] And the rest for you. There.
+VO	end_1	[contented] Go on. Eat up, the pair of you.
+VO	end_2	[softly, after a pause] We're alright, aren't we? The three of us.
+VO	end_3	[very softly] ...Good cats.
+VO	table_1	The table.
+VO	table_2	Table. Sticky.
+VO	glass_1	My glass of water.
+VO	glass_2	Careful with that.
+VO	glass_wobble	[alarmed] Careful— my glass...
+VO	glass_smash_1	[dismayed] Oh, no. No, no, no...
+VO	glass_smash_2	[sighs] Glass everywhere now. Mind your feet.
+VO	glass_step	[sharp, alarmed] Glass! Mind your feet, mind your feet...
+VO	chair_mine_1	My chair.
+VO	chair_mine_2	Still warm.
+VO	chair_other_1	The other chair.
+VO	chair_other_2	[wistful] Nobody sits there anymore.
+VO	chair_other_cat	[whispering] Oh... Biscuit. Fast asleep. Leave him be.
+VO	chair_other_empty	Still warm. So that's where he was hiding.
+VO	wall_1	Wall.
+VO	wall_2	Just the wall.
+VO	wall_3	The wallpaper's lifting there.
+VO	clock	The clock's up there somewhere. Can't reach it.
+VO	door_1	The back door. Feel that draught.
+VO	door_2	Cold glass. Still raining.
+VO	flap	The cat flap. They won't go out in this.
+VO	floor_1	The floor. Cold tiles.
+VO	rug_1	The rug.
+VO	worktop	Worktop... cupboards underneath.
+VO	sink_1	The sink. Cold.
+VO	sink_2	That tap. Drip, drip, drip.
+VO	cup_bump	A cupboard.
+VO	cupA_open	Pans cupboard.
+VO	cupA_feel	Pans. Just pans.
+VO	cupB_open	Under the sink...
+VO	cupB_feel	Bleach... cloths. Not in here.
+VO	cupC_open	Now then...
+VO	cupC_beans	Beans. Not beans...
+VO	cupC_more	More beans. Who eats all these beans?
+VO	cup_door_1	[pained] Ow— a door. Who left that open?
+VO	cup_door_2	[sheepish] ...Me. I did.
+VO	cup_shut	Shut that.
+VO	bread_1	Bread bin.
+VO	bread_2	Just bread. You don't like bread.
+VO	oven	The oven door. Cold, at least.
+VO	burn	[cries out in pain] Ah! Hot— hot!
+VO	kettle	[puzzled] Was the kettle left on? I don't remember putting it on...
+VO	bin	The bin. Wants emptying.
+VO	fridge_1	The fridge.
+VO	fridge_2	Milk... butter. Nothing for you in here, madam.
+VO	fridge_3	Nothing in the fridge for you. I told you.
+VO	radiator	Radiator. Barely warm.
+VO	bucket_1	[startled] The mop bucket! Who left that there?
+VO	bucket_2	[sheepish] ...Me, probably.
+VO	bucket_r	Mop bucket.
+VO	bowl_p_empty	Her bowl. Empty. Licked clean.
+VO	bowl_b_empty	His bowl. Empty, of course.
+VO	bowl_generic	I know, I know.
+VO	bowl_kick	A bowl— under my foot.
+VO	bowl_full	Leave them to it.
+VO	water_1	Water bowl. Still got water.
+VO	water_spill	[annoyed] Oh, blast. The water.
+VO	water_empty	The water bowl. Empty now.
+VO	nothing_1	Nothing there.
+VO	nothing_2	Hm. Nothing.
+VO	rub_1	Yes, I know.
+VO	rub_2	Alright, alright.
+VO	rub_3	Mind my legs, you.
+VO	rub_4	[fondly] Hello, sweetheart.
+VO	stroke_p_1	[fondly] There she is.
+VO	stroke_p_2	Good girl.
+VO	stroke_b_1	[fondly] Hello, old man.
+VO	stroke_b_2	Big lump.
+VO	under_1	[alarmed] Pudding! You'll have me over!
+VO	under_2	[sharp] Get from under my feet!
+VO	under_3	[alarmed] Biscuit! Mind!
+VO	stumble_1	[alarmed] Whoa— steady. Steady...
+VO	stumble_2	[breathless] Steady...
+VO	stumble_3	Careful.
+VO	wet_1	[alarmed] Whoa— wet. The sink's leaking again.
+VO	wet_2	Wet. Careful.
+VO	fall_1a	[groaning, shaken] Oh— oh dear. Oh dear...
+VO	fall_1b	[gathering himself] Come on. Up you get, you silly old thing.
+VO	fall_2a	[shaken] Not again... not again.
+VO	fall_2b	Up. Come on. Up.
+VO	fall_3a	[weakly] I'm alright. I'm alright.
+VO	fall_3b	Slowly. Slowly does it.
+VO	ow_1	[winces] Ow.
+VO	ow_2	[winces] Ooh, my hip.
+VO	slowly	Slowly does it...
+SFX	meow_p2	Single meow from a small young female cat, high pitched, insistent and demanding, close-mic, completely dry studio recording, no reverb, no background noise
+SFX	meow_p3	Short questioning chirp-trill "mrrp" from a small cat, friendly greeting, close-mic, dry, no reverb, no background
+SFX	meow_p4	Single long pleading meow from a small female cat begging for food, close-mic, dry, no reverb, no background
+SFX	meow_b1	Single deep gruff meow from a big old tomcat, low pitched and raspy, close-mic, completely dry, no reverb, no background
+SFX	meow_b2	Single long grumbling demanding low meow from a large old male cat, hoarse, close-mic, dry, no reverb, no background
+SFX	meow_b3	Short low sleepy grunt-like chirp from a big old cat just waking up, close-mic, dry, no reverb
+SFX	yowl	Cat yowling in sudden startled pain when its tail is stepped on, short sharp screech, close-mic, dry, no reverb
+SFX	hiss	Cat hissing and spitting once, short, close-mic, dry, no reverb, no background
+SFX	purr_p	Small cat purring steadily and contentedly, even rhythm, close-mic, dry, no other sounds
+SFX	purr_b	Large old cat purring, deep slow rumbling purr, close-mic, dry, no other sounds
+SFX	bell_p	Tiny cat collar bell jingling once, bright light tinkle, close-mic, dry, no reverb
+SFX	bell_p2	Tiny cat collar bell, two quick light jingles, bright, close-mic, dry, no reverb
+SFX	bell_b	Small metal pet ID tag clinking once against a collar buckle, dull low clink, close-mic, dry, no reverb
+SFX	cat_eat	Cat eating wet food from a ceramic bowl, wet lapping and chewing, close-mic, dry, steady, no other sounds
+SFX	cat_land	Cat jumping down from a chair onto a tiled floor, soft double thump of paws, close-mic, dry
+SFX	snore	Cat sleeping, soft slow snoring breaths, very quiet, close-mic, dry, no other sounds
+SFX	fur	Hand stroking soft cat fur, gentle brushing rustle, close-mic, dry
+SFX	step_tile1	One single shuffling slipper footstep on a ceramic tile floor, soft scuff, close-mic, dry, no reverb
+SFX	step_tile2	One single slow slipper footstep on hard kitchen tiles, soft pad and slight drag, close-mic, dry, no reverb
+SFX	step_tile3	One single soft slipper footstep on tile, quiet shuffle, close-mic, dry, no reverb
+SFX	step_rug1	One single slipper footstep on a thick rug, muffled soft thump, close-mic, dry
+SFX	step_rug2	One single muffled footstep on carpet, soft and dull, close-mic, dry
+SFX	step_wet	One single footstep into a shallow puddle on a tile floor, small wet splash, close-mic, dry
+SFX	step_glass	One single footstep crunching on broken glass shards on a tile floor, close-mic, dry
+SFX	knock_wood	Hip bumping into a wooden table once, dull wooden knock and slight rattle, close-mic, dry, no reverb
+SFX	bump_soft	Body bumping into a solid kitchen cabinet, dull low thud, close-mic, dry, no reverb
+SFX	pat_wall	Flat palm patting a plastered wall once, soft slap, close-mic, dry, no reverb
+SFX	reach	Sleeve fabric rustling as an arm reaches out, short soft cloth movement, close-mic, dry
+SFX	hand_wood	Fingertips tapping and brushing a wooden surface, light touch, short, close-mic, dry
+SFX	hand_metal	Fingertips tapping a hollow metal appliance door once, light metallic tap, close-mic, dry
+SFX	creak_open	Old wooden kitchen cupboard door creaking open, short hinge squeak, close-mic, dry, no reverb
+SFX	creak_close	Wooden cupboard door closing with a soft knock, close-mic, dry, no reverb
+SFX	rummage	Hand rummaging among tins and packets inside a cupboard, short, close-mic, dry
+SFX	pans	Saucepans clanking together inside a cupboard, short metallic clatter, close-mic, dry
+SFX	tin_pick	Picking up a metal food tin from a shelf, small metallic clink and slide, close-mic, dry
+SFX	ring_pull	Ring-pull tin can being opened, crack then peel of the metal lid, close-mic, dry
+SFX	scoop	Wet cat food being scooped out of a tin with a fork into a ceramic bowl, squelch and clink, close-mic, dry
+SFX	bowl_clink	Ceramic pet bowl nudged on a tile floor, short scrape and clink, close-mic, dry
+SFX	glass_clink	Drinking glass wobbling and clinking on a wooden table, short, close-mic, dry
+SFX	glass_smash	Drinking glass falling and smashing on a tiled kitchen floor, sharp bright shatter, close-mic, dry
+SFX	bucket	Metal mop bucket kicked by a foot, hollow metallic clang and handle rattle, close-mic, dry
+SFX	bin	Foot knocking a metal pedal bin, short hollow clank, close-mic, dry
+SFX	water_spill	Small bowl of water knocked over on a tile floor, splash and ceramic clatter, close-mic, dry
+SFX	fall	Person falling heavily onto a kitchen floor, heavy body thud, close-mic, dry, no voice
+SFX	sizzle	Brief sharp sizzle of skin touching a hot stove hob, short, close-mic, dry
+SFX	chair_scrape	Wooden chair pushed back, legs scraping on a floor, short, close-mic, dry
+SFX	knees	Old knee joints cracking, two or three small dry cracks, close-mic, dry
+SFX	fridge_open	Fridge door opening, rubber seal pop and bottles rattling, close-mic, dry
+SFX	fridge_close	Fridge door closing, soft sealed thump, close-mic, dry
+SFX	heartbeat	Slow heavy human heartbeat, deep low thumps, steady, close, dry
+SFX	breath	Elderly man breathing heavily and shakily, recovering his breath, close-mic, dry, no words
+SFX	fridge_hum	Old refrigerator compressor humming steadily, low electrical drone, constant, close-mic, no other sounds
+SFX	clock	Wall clock ticking steadily, one tick per second, close-mic, dry, no other sounds
+SFX	drip	Kitchen tap dripping slowly into a steel sink, single drops about every two seconds, close-mic, dry
+SFX	rain	Steady rain pattering against a window pane, heard from indoors close to the glass, constant
+SFX	draught	Cold wind whistling softly through the gap under a door, low moaning draught, constant
+SFX	kettle	Kettle gently simmering on a stove, soft hiss and faint bubbling, constant, close-mic
+SFX	radiator	Old radiator ticking and gurgling as pipes warm, occasional metallic ticks and soft gurgle, close-mic, dry

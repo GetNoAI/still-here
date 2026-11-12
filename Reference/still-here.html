@@ -1,0 +1,1418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Still Here</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}
+  canvas{display:block;cursor:none}
+</style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   STILL HERE — darkness prototype.
+   Everything you perceive is sound, an old voice, and faint particle
+   "touch" outlines. No UI. Audio is synthesised; voice is speechSynthesis.
+   Debug: window.__game  (add ?debug to the URL for verbose logs)
+   ===================================================================== */
+const DEBUG = /debug/.test(location.search);
+const log = (...a) => console.log('[still-here]', ...a);
+
+// ---------- utils
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a = 1, b) => b === undefined ? Math.random() * a : a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const hyp = Math.hypot;
+const wrapA = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+const ease = t => t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t);
+
+// ---------- constants
+const EYE_STAND = 1.55, EYE_SIT = 1.12, EYE_FLOOR = 0.38, PR = 0.25, CATR = 0.12;
+const FOV = 75;
+const WALK = 0.85;           // old legs
+let now = 0;                 // game clock (s)
+let SIM = false;             // headless simulation (no audio)
+
+/* =====================================================================
+   RENDERING — only particles exist visually
+   ===================================================================== */
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: DEBUG });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000000, 1);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(FOV, innerWidth / innerHeight, 0.02, 60);
+camera.rotation.order = 'YXZ';
+
+const PMAX = 70000;
+const pPos = new Float32Array(PMAX * 3), pBirth = new Float32Array(PMAX).fill(-1e6),
+      pLife = new Float32Array(PMAX).fill(1), pSize = new Float32Array(PMAX), pBright = new Float32Array(PMAX);
+const pGeo = new THREE.BufferGeometry();
+const aPos = new THREE.BufferAttribute(pPos, 3), aBirth = new THREE.BufferAttribute(pBirth, 1),
+      aLife = new THREE.BufferAttribute(pLife, 1), aSize = new THREE.BufferAttribute(pSize, 1),
+      aBright = new THREE.BufferAttribute(pBright, 1);
+[aPos, aBirth, aLife, aSize, aBright].forEach(a => a.setUsage(THREE.DynamicDrawUsage));
+pGeo.setAttribute('position', aPos); pGeo.setAttribute('aBirth', aBirth); pGeo.setAttribute('aLife', aLife);
+pGeo.setAttribute('aSize', aSize); pGeo.setAttribute('aBright', aBright);
+const pMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 }, uScale: { value: 600 } },
+  vertexShader: `
+    uniform float uTime; uniform float uScale;
+    attribute float aBirth; attribute float aLife; attribute float aSize; attribute float aBright;
+    varying float vA;
+    void main(){
+      float age = uTime - aBirth;
+      float a = 0.0;
+      if(age > 0.0 && age < aLife){
+        a = smoothstep(0.0, 0.22, age) * (1.0 - smoothstep(aLife*0.3, aLife, age));
+      }
+      vec3 p = position;
+      float ag = max(age, 0.0);
+      p.y += ag * 0.008;
+      p.x += sin(ag*2.7 + position.z*37.0) * 0.0025;
+      p.z += cos(ag*2.3 + position.x*41.0) * 0.0025;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      float d = max(-mv.z, 0.2);
+      gl_PointSize = clamp(aSize * uScale / d, 1.0, 5.5);
+      vA = a * aBright;
+      gl_Position = projectionMatrix * mv;
+      if(a <= 0.002) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    }`,
+  fragmentShader: `
+    varying float vA;
+    void main(){
+      vec2 c = gl_PointCoord - 0.5; float r = dot(c,c);
+      if(r > 0.25) discard;
+      float f = 1.0 - r*4.0;
+      gl_FragColor = vec4(0.93, 0.95, 1.0, vA * f * 0.75);
+    }`,
+  transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending
+});
+const pPoints = new THREE.Points(pGeo, pMat);
+pPoints.frustumCulled = false;
+scene.add(pPoints);
+let pHead = 0, pDirty = false;
+function emitPoint(x, y, z, birth, life, size, bright) {
+  const i = pHead; pHead = (pHead + 1) % PMAX;
+  pPos[i * 3] = x; pPos[i * 3 + 1] = y; pPos[i * 3 + 2] = z;
+  pBirth[i] = birth; pLife[i] = life; pSize[i] = size; pBright[i] = bright;
+  pDirty = true;
+}
+function onResize() {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  pMat.uniforms.uScale.value = (renderer.domElement.height / 2) / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+}
+addEventListener('resize', onResize); onResize();
+
+/* ---------- shape samplers (points: [x,y,z,brightness]) */
+function sampleBox(mn, mx, p, R, out, dens) {
+  const lo = [0, 0, 0], hi = [0, 0, 0];
+  for (let a = 0; a < 3; a++) { lo[a] = Math.max(mn[a], p[a] - R); hi[a] = Math.min(mx[a], p[a] + R); if (lo[a] > hi[a] + 1e-6) return; }
+  const fin = isFinite(R), R2 = R * R;
+  const ok = q => !fin || ((q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2) <= R2;
+  const e = 1e-6;
+  for (let a = 0; a < 3; a++) {              // 12 edges — the outline
+    const b = (a + 1) % 3, c = (a + 2) % 3;
+    for (const vb of [mn[b], mx[b]]) for (const vc of [mn[c], mx[c]]) {
+      if (vb < lo[b] - e || vb > hi[b] + e || vc < lo[c] - e || vc > hi[c] + e) continue;
+      const len = hi[a] - lo[a], n = Math.max(1, Math.floor(len / 0.018 * dens));
+      for (let i = 0; i <= n; i++) {
+        const q = [0, 0, 0];
+        q[a] = lo[a] + len * i / n + (Math.random() - 0.5) * 0.01;
+        q[b] = vb + (Math.random() - 0.5) * 0.004; q[c] = vc + (Math.random() - 0.5) * 0.004;
+        if (ok(q)) out.push([q[0], q[1], q[2], 1]);
+      }
+    }
+  }
+  for (let a = 0; a < 3; a++) {              // faces — sparse fill
+    const b = (a + 1) % 3, c = (a + 2) % 3;
+    for (const v of [mn[a], mx[a]]) {
+      if (v < lo[a] - e || v > hi[a] + e) continue;
+      const w = hi[b] - lo[b], h = hi[c] - lo[c], n = Math.floor(w * h * 190 * dens);
+      for (let i = 0; i < n; i++) {
+        const q = [0, 0, 0]; q[a] = v; q[b] = lo[b] + Math.random() * w; q[c] = lo[c] + Math.random() * h;
+        if (ok(q)) out.push([q[0], q[1], q[2], 0.4]);
+      }
+    }
+  }
+}
+function sampleCyl(c, r, h, p, R, out, dens) {
+  const fin = isFinite(R), R2 = R * R;
+  const push = (x, y, z, b) => { if (!fin || ((x - p[0]) ** 2 + (y - p[1]) ** 2 + (z - p[2]) ** 2) <= R2) out.push([x, y, z, b]); };
+  const nr = Math.max(10, Math.floor(2 * Math.PI * r / 0.014 * dens));
+  for (const y of [c[1], c[1] + h]) for (let i = 0; i < nr; i++) { const a = i / nr * 2 * Math.PI; push(c[0] + Math.cos(a) * r, y, c[2] + Math.sin(a) * r, 1); }
+  for (let k = 0; k < 8; k++) { const a = k / 8 * 2 * Math.PI; for (let y = 0; y <= h; y += 0.02) push(c[0] + Math.cos(a) * r, c[1] + y, c[2] + Math.sin(a) * r, 0.55); }
+  const ns = Math.floor(2 * Math.PI * r * h * 220 * dens);
+  for (let i = 0; i < ns; i++) { const a = Math.random() * 2 * Math.PI; push(c[0] + Math.cos(a) * r, c[1] + Math.random() * h, c[2] + Math.sin(a) * r, 0.4); }
+  const nt = Math.floor(Math.PI * r * r * 300 * dens);
+  for (let i = 0; i < nt; i++) { const a = Math.random() * 2 * Math.PI, rr = r * Math.sqrt(Math.random()); push(c[0] + Math.cos(a) * rr, c[1] + h, c[2] + Math.sin(a) * rr, 0.35); }
+}
+function samplePart(part, p, R, out, dens) {
+  if (part.type === 'cyl') sampleCyl(part.c, part.r, part.h, p, R, out, dens);
+  else sampleBox(part.min, part.max, p, R, out, dens);
+}
+function emitSet(pts, p, opt) {
+  const R = opt.R;
+  const cap = opt.cap || 2600, keep = pts.length > cap ? cap / pts.length : 1;
+  const life0 = opt.life || 2.0, spd = opt.speed || 1.3, br = opt.bright || 1;
+  for (const q of pts) {
+    if (keep < 1 && Math.random() > keep) continue;
+    const d = hyp(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+    const fall = isFinite(R) ? (1 - 0.65 * d / R) : 1;
+    emitPoint(q[0], q[1], q[2], now + (opt.delay0 || 0) + d / spd + Math.random() * 0.08,
+      life0 * rand(0.8, 1.2), rand(0.007, 0.012) * (opt.sizeMul || 1), q[3] * fall * br);
+  }
+}
+function touchObject(o, p, opt = {}) {
+  const R = opt.R ?? o.R ?? 0.8, pts = [];
+  for (const part of o.parts) samplePart(part, p, R, pts, opt.density || 1);
+  emitSet(pts, p, { ...opt, R });
+  if (!opt.noGlance) glanceTo(p);
+}
+// Cat silhouette — ellipsoid body, head, ears, legs, tail. Rim-lit relative to the camera.
+function sampleCat(cx, cz, h, contact, opt = {}) {
+  if (SIM) return;
+  const f = [Math.sin(h), Math.cos(h)], s = [Math.cos(h), -Math.sin(h)];
+  const W = (lx, ly, lz) => [cx + s[0] * lx + f[0] * lz, ly, cz + s[1] * lx + f[1] * lz];
+  const cam = camera.position, out = [];
+  const rim = (q, n) => {
+    const v = [q[0] - cam.x, q[1] - cam.y, q[2] - cam.z], l = hyp(...v) || 1;
+    const d = Math.abs((v[0] * n[0] + v[1] * n[1] + v[2] * n[2]) / l);
+    return 0.2 + 0.8 * Math.pow(1 - d, 2);
+  };
+  const ellip = (c0, r, n) => {
+    for (let i = 0; i < n; i++) {
+      let u = [rand(-1, 1), rand(-1, 1), rand(-1, 1)]; const L = hyp(...u) || 1; u = u.map(v => v / L);
+      const q = W(c0[0] + u[0] * r[0], c0[1] + u[1] * r[1], c0[2] + u[2] * r[2]);
+      const nl = [u[0] / r[0], u[1] / r[1], u[2] / r[2]], nL = hyp(...nl);
+      const nw = [(s[0] * nl[0] + f[0] * nl[2]) / nL, nl[1] / nL, (s[1] * nl[0] + f[1] * nl[2]) / nL];
+      out.push([...q, rim(q, nw)]);
+    }
+  };
+  const line = (a, b, n, br = 0.9) => { for (let i = 0; i <= n; i++) { const t = i / n; out.push([...W(lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)), br]); } };
+  ellip([0, 0.2, 0], [0.075, 0.085, 0.2], 420);       // body
+  ellip([0, 0.29, 0.22], [0.062, 0.058, 0.065], 170); // head
+  for (const sx of [-1, 1]) {                         // ears
+    line([sx * 0.02, 0.33, 0.22], [sx * 0.042, 0.385, 0.215], 8);
+    line([sx * 0.042, 0.385, 0.215], [sx * 0.06, 0.315, 0.22], 8);
+  }
+  for (const lz of [0.13, -0.13]) for (const lx of [-0.04, 0.04]) line([lx, 0.14, lz], [lx, 0.0, lz + 0.01], 10, 0.7); // legs
+  for (let i = 0; i <= 26; i++) {                     // tail curl
+    const t = i / 26; out.push([...W(0.04 * Math.sin(t * 3), 0.17 + t * 0.26 + Math.sin(t * 3.1) * 0.03, -0.2 - t * 0.16 + t * t * 0.08), 0.85]);
+  }
+  emitSet(out, contact || [cx, 0.2, cz], { R: Infinity, life: opt.life || 1.8, speed: 0.9, bright: opt.bright || 1 });
+  if (!opt.noGlance) glanceTo([cx, 0.2, cz]);
+}
+// Pre-start invitation: a faint, breathing outline of headphones. No words.
+function emitHeadphones() {
+  const pts = [], m = camera.matrixWorld;
+  const v = new THREE.Vector3();
+  const P = (x, y) => { v.set(x, y, -2.4).applyMatrix4(m); pts.push([v.x, v.y, v.z, 1]); };
+  for (let i = 0; i <= 70; i++) { const a = Math.PI * i / 70; P(Math.cos(a) * 0.36, Math.sin(a) * 0.34 - 0.02); }
+  for (const sx of [-1, 1]) for (let i = 0; i < 46; i++) { const a = i / 46 * 2 * Math.PI; P(sx * 0.37 + Math.cos(a) * 0.075, -0.08 + Math.sin(a) * 0.12); P(sx * 0.37 + Math.cos(a) * 0.04, -0.08 + Math.sin(a) * 0.075); }
+  emitSet(pts, [camera.position.x, camera.position.y + 0.3, camera.position.z - 2.4], { R: Infinity, life: 2.4, speed: 3, bright: 0.55, sizeMul: 0.9 });
+}
+
+/* =====================================================================
+   AUDIO — everything synthesised
+   ===================================================================== */
+let AC = null;
+const bus = {};
+const NB = new WeakMap();
+function nb(c) {
+  let b = NB.get(c);
+  if (!b) { const len = c.sampleRate * 2; b = c.createBuffer(1, len, c.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; NB.set(c, b); }
+  return b;
+}
+function noiseSrc(c, t, dur) { const s = c.createBufferSource(); s.buffer = nb(c); s.loop = true; s.start(t, Math.random() * 1.5); s.stop(t + dur); return s; }
+function loopNoise(c) { const s = c.createBufferSource(); s.buffer = nb(c); s.loop = true; s.start(0, Math.random() * 1.5); return s; }
+function envG(c, t, a, peak, d) { const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); return g; }
+function filt(c, type, f, Q = 1) { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = Q; return b; }
+function chain(...n) { for (let i = 0; i < n.length - 1; i++) n[i].connect(n[i + 1]); return n[n.length - 1]; }
+function tone(c, type, f, t, dur) { const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(t + dur); return o; }
+function makePanner(c, x, y, z, ref = 0.6, roll = 1.1) {
+  const p = c.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'inverse';
+  p.refDistance = ref; p.rolloffFactor = roll; p.maxDistance = 30; setPannerPos(p, x, y, z); return p;
+}
+function setPannerPos(p, x, y, z) { if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; } else p.setPosition(x, y, z); }
+function setListener(L, pos, fwd, up) {
+  if (L.positionX) {
+    L.positionX.value = pos[0]; L.positionY.value = pos[1]; L.positionZ.value = pos[2];
+    L.forwardX.value = fwd[0]; L.forwardY.value = fwd[1]; L.forwardZ.value = fwd[2];
+    L.upX.value = up[0]; L.upY.value = up[1]; L.upZ.value = up[2];
+  } else { L.setPosition(...pos); L.setOrientation(...fwd, ...up); }
+}
+
+/* ---------- sound bank: S.name(ctx, out, t, opts) */
+const S = {
+  tick(c, out, t, o = {}) {
+    chain(noiseSrc(c, t, 0.03), filt(c, 'bandpass', o.tock ? 2300 : 3100, 9), envG(c, t, 0.001, 2.0, 0.03), out);
+    chain(tone(c, 'sine', o.tock ? 1500 : 1900, t, 0.05), envG(c, t, 0.001, 0.06, 0.02), out);
+  },
+  drip(c, out, t) {
+    const s = c.createOscillator(); s.frequency.setValueAtTime(rand(1100, 1500), t); s.frequency.exponentialRampToValueAtTime(rand(380, 520), t + 0.07);
+    chain(s, envG(c, t, 0.002, 0.6, 0.09), out); s.start(t); s.stop(t + 0.15);
+    chain(noiseSrc(c, t, 0.04), filt(c, 'highpass', 3000), envG(c, t, 0.001, 0.06, 0.03), out);
+  },
+  raindrop(c, out, t) { chain(tone(c, 'sine', rand(2500, 5200), t, 0.05), envG(c, t, 0.001, rand(0.008, 0.03), 0.03), out); },
+  bubble(c, out, t) {
+    const s = c.createOscillator(); const f = rand(300, 800); s.frequency.setValueAtTime(f, t); s.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.05);
+    chain(s, envG(c, t, 0.002, 0.06, 0.06), out); s.start(t); s.stop(t + 0.1);
+  },
+  gurgle(c, out, t) {
+    const s = c.createOscillator(); s.type = 'triangle'; for (let i = 0; i < 14; i++) s.frequency.setValueAtTime(rand(110, 280), t + i * 0.11);
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    chain(s, filt(c, 'lowpass', 500), g, out); s.start(t); s.stop(t + 1.7);
+    for (let i = 0; i < 3; i++) { const tt = t + 1.7 + i * rand(0.4, 0.9); chain(noiseSrc(c, tt, 0.02), filt(c, 'bandpass', 2600, 6), envG(c, tt, 0.001, 0.25, 0.02), out); }
+  },
+  thud(c, out, t, o = {}) {
+    const k = o.strength || 1; const s = c.createOscillator(); s.frequency.setValueAtTime(95, t); s.frequency.exponentialRampToValueAtTime(42, t + 0.25);
+    chain(s, envG(c, t, 0.004, 0.75 * k, 0.3), out); s.start(t); s.stop(t + 0.4);
+    chain(noiseSrc(c, t, 0.2), filt(c, 'lowpass', 450), envG(c, t, 0.002, 0.6 * k, 0.15), out);
+  },
+  knock(c, out, t, o = {}) {
+    const k = o.gain || 1, f = o.f || 210;
+    const s = c.createOscillator(); s.type = 'triangle'; s.frequency.setValueAtTime(f, t); s.frequency.exponentialRampToValueAtTime(f * 0.8, t + 0.1);
+    chain(s, envG(c, t, 0.002, 0.45 * k, 0.1), out); s.start(t); s.stop(t + 0.16);
+    chain(noiseSrc(c, t, 0.06), filt(c, 'bandpass', f * 6.5, 4), envG(c, t, 0.001, 0.6 * k, 0.05), out);
+  },
+  pat(c, out, t, o = {}) { // palm on a soft/flat surface
+    const k = o.gain || 1;
+    chain(noiseSrc(c, t, 0.12), filt(c, 'lowpass', o.f || 900), envG(c, t, 0.006, 0.9 * k, 0.08), out);
+    chain(noiseSrc(c, t + 0.05, 0.2), filt(c, 'bandpass', 2500, 0.8), envG(c, t + 0.05, 0.05, 0.05 * k, 0.12), out);
+  },
+  clang(c, out, t, o = {}) {
+    const base = o.f || 420, k = o.gain || 1, dec = o.decay || 1.0;
+    [1, 2.32, 4.25, 6.8].forEach((m, i) => chain(tone(c, 'sine', base * m * rand(0.99, 1.01), t, dec * 2), envG(c, t, 0.002, 0.22 * k / (i + 1), dec / (1 + i * 0.5)), out));
+    chain(noiseSrc(c, t, 0.05), filt(c, 'highpass', 2000), envG(c, t, 0.001, 0.25 * k, 0.04), out);
+  },
+  clink(c, out, t, o = {}) {
+    const f = o.f || 2600, k = o.gain || 1;
+    [1, 1.58, 2.31].forEach((m, i) => chain(tone(c, 'sine', f * m, t, 0.5), envG(c, t, 0.001, 0.14 * k / (i + 1), 0.28 / (1 + i * 0.4)), out));
+  },
+  smash(c, out, t) {
+    chain(noiseSrc(c, t, 0.5), filt(c, 'highpass', 2200), envG(c, t, 0.003, 0.5, 0.32), out);
+    for (let i = 0; i < 30; i++) { const tt = t + Math.random() * Math.random() * 0.6; chain(tone(c, 'sine', rand(2200, 7500), tt, 0.35), envG(c, tt, 0.001, rand(0.03, 0.12), rand(0.05, 0.25)), out); }
+    S.knock(c, out, t, { f: 300, gain: 0.6 });
+  },
+  creak(c, out, t, o = {}) {
+    const d = o.dur || 0.7, k = o.gain || 1; const s = c.createOscillator(); s.type = 'sawtooth';
+    s.frequency.setValueAtTime(rand(30, 45), t); for (let i = 1; i <= 7; i++) s.frequency.linearRampToValueAtTime(rand(16, 70), t + d * i / 7);
+    const b1 = filt(c, 'bandpass', rand(700, 1000), 12), b2 = filt(c, 'bandpass', rand(1500, 2100), 16);
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(2.4 * k, t + 0.05); g.gain.setValueAtTime(2.4 * k, t + d * 0.8); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    s.connect(b1); s.connect(b2); b1.connect(g); b2.connect(g); g.connect(out); s.start(t); s.stop(t + d + 0.05);
+  },
+  rustle(c, out, t, o = {}) {
+    for (let i = 0; i < (o.n || 7); i++) { const tt = t + rand(0, 0.5); chain(noiseSrc(c, tt, 0.08), filt(c, 'bandpass', rand(2500, 5000), 1), envG(c, tt, 0.005, rand(0.1, 0.22), 0.05), out); }
+  },
+  tinPick(c, out, t) {
+    S.knock(c, out, t, { f: 330, gain: 0.4 });
+    S.clink(c, out, t + 0.02, { f: 1250, gain: 0.8 });
+    chain(noiseSrc(c, t + 0.1, 0.15), filt(c, 'bandpass', 4000, 2), envG(c, t + 0.1, 0.01, 0.12, 0.1), out);
+  },
+  ringPull(c, out, t) {
+    chain(noiseSrc(c, t, 0.01), filt(c, 'highpass', 3000), envG(c, t, 0.001, 0.5, 0.008), out);
+    const n = noiseSrc(c, t + 0.05, 0.4), b = filt(c, 'bandpass', 2500, 3);
+    b.frequency.setValueAtTime(2500, t + 0.05); b.frequency.linearRampToValueAtTime(4500, t + 0.35);
+    chain(n, b, envG(c, t + 0.05, 0.02, 0.35, 0.25), out);
+    S.clink(c, out, t + 0.38, { f: 1900, gain: 0.5 });
+  },
+  scoop(c, out, t) {
+    const n = noiseSrc(c, t, 0.5), b = filt(c, 'lowpass', 250, 6);
+    b.frequency.setValueAtTime(250, t); b.frequency.linearRampToValueAtTime(1400, t + 0.15); b.frequency.linearRampToValueAtTime(350, t + 0.4);
+    chain(n, b, envG(c, t, 0.03, 0.55, 0.35), out);
+    S.clink(c, out, t + 0.32, { f: 900, gain: 0.5 });
+  },
+  whoosh(c, out, t, o = {}) {
+    const n = noiseSrc(c, t, 0.5), b = filt(c, 'bandpass', 350, 1.2);
+    b.frequency.setValueAtTime(350, t); b.frequency.linearRampToValueAtTime(1100, t + 0.15); b.frequency.linearRampToValueAtTime(300, t + 0.4);
+    chain(n, b, envG(c, t, 0.08, 0.35 * (o.gain || 1), 0.25), out);
+  },
+  splash(c, out, t, o = {}) {
+    const k = o.gain || 1;
+    chain(noiseSrc(c, t, 0.4), filt(c, 'bandpass', 1500, 0.6), envG(c, t, 0.004, 0.5 * k, 0.32), out);
+    for (let i = 0; i < 5; i++) { const tt = t + rand(0, 0.25); const s = c.createOscillator(); s.frequency.setValueAtTime(rand(400, 700), tt); s.frequency.exponentialRampToValueAtTime(rand(1200, 2000), tt + 0.04); chain(s, envG(c, tt, 0.002, 0.08 * k, 0.04), out); s.start(tt); s.stop(tt + 0.08); }
+  },
+  crunch(c, out, t, o = {}) {
+    for (let i = 0; i < 7; i++) { const tt = t + rand(0, 0.14); chain(noiseSrc(c, tt, 0.03), filt(c, 'highpass', 3000), envG(c, tt, 0.001, 0.35 * (o.gain || 1), 0.02), out); }
+    for (let i = 0; i < 4; i++) S.clink(c, out, t + rand(0, 0.15), { f: rand(3000, 6000), gain: 0.3 });
+  },
+  step(c, out, t, o = {}) {
+    const sf = o.surface || 'tile', k = o.gain || 1;
+    if (sf === 'rug') { chain(noiseSrc(c, t, 0.2), filt(c, 'lowpass', 420), envG(c, t, 0.03, 0.85 * k, 0.12), out); return; }
+    chain(noiseSrc(c, t, 0.2), filt(c, 'bandpass', rand(900, 1300), 1.4), envG(c, t, 0.025, 0.75 * k, 0.1), out); // slipper shuffle
+    chain(noiseSrc(c, t + 0.03, 0.02), filt(c, 'highpass', 4000), envG(c, t + 0.03, 0.001, 0.06 * k, 0.01), out);
+    if (sf === 'wet') S.splash(c, out, t + 0.02, { gain: 0.45 });
+    if (sf === 'glass') S.crunch(c, out, t + 0.01, { gain: 0.8 });
+  },
+  heartbeat(c, out, t) {
+    for (const [dt, pk] of [[0, 0.85], [0.26, 0.55]]) chain(tone(c, 'sine', 52, t + dt, 0.3), filt(c, 'lowpass', 140), envG(c, t + dt, 0.008, pk, 0.14), out);
+  },
+  breath(c, out, t, o = {}) {
+    const k = o.gain || 1;
+    const a = noiseSrc(c, t, 1.4), ga = c.createGain(); ga.gain.setValueAtTime(0, t); ga.gain.linearRampToValueAtTime(0.26 * k, t + 0.6); ga.gain.linearRampToValueAtTime(0, t + 1.1);
+    chain(a, filt(c, 'bandpass', 700, 0.9), ga, out);
+    const b = noiseSrc(c, t + 1.2, 1.5), gb = c.createGain(); gb.gain.setValueAtTime(0, t + 1.2); gb.gain.linearRampToValueAtTime(0.28 * k, t + 1.45); gb.gain.linearRampToValueAtTime(0, t + 2.5);
+    chain(b, filt(c, 'bandpass', 450, 0.9), gb, out);
+  },
+  sizzle(c, out, t) {
+    chain(noiseSrc(c, t, 0.9), filt(c, 'highpass', 3500), envG(c, t, 0.01, 0.4, 0.7), out);
+    for (let i = 0; i < 18; i++) { const tt = t + rand(0, 0.6); chain(noiseSrc(c, tt, 0.01), filt(c, 'bandpass', rand(2000, 6000), 3), envG(c, tt, 0.001, 0.35, 0.008), out); }
+  },
+  scrape(c, out, t) {
+    const n = noiseSrc(c, t, 0.6), b = filt(c, 'bandpass', 500, 5); b.frequency.linearRampToValueAtTime(800, t + 0.45);
+    chain(n, b, envG(c, t, 0.05, 1.6, 0.4), out);
+    const s = c.createOscillator(); s.type = 'sawtooth'; s.frequency.setValueAtTime(110, t); s.frequency.linearRampToValueAtTime(140, t + 0.4);
+    chain(s, filt(c, 'bandpass', 900, 8), envG(c, t, 0.05, 0.6, 0.4), out); s.start(t); s.stop(t + 0.6);
+  },
+  kneeCreak(c, out, t) {
+    for (let i = 0; i < 3; i++) { const tt = t + i * rand(0.05, 0.09); chain(noiseSrc(c, tt, 0.015), filt(c, 'bandpass', 1800, 5), envG(c, tt, 0.001, 1.3, 0.015), out); }
+  },
+  fridgePop(c, out, t) {
+    const s = c.createOscillator(); s.frequency.setValueAtTime(140, t); s.frequency.exponentialRampToValueAtTime(60, t + 0.12);
+    chain(s, envG(c, t, 0.002, 0.45, 0.15), out); s.start(t); s.stop(t + 0.2);
+    chain(noiseSrc(c, t, 0.15), filt(c, 'lowpass', 800), envG(c, t, 0.004, 0.3, 0.1), out);
+  },
+  bell(c, out, t, o = {}) {
+    const n = o.n || (1 + Math.floor(Math.random() * 3)), base = rand(4300, 5400), k = o.gain || 1;
+    for (let i = 0; i < n; i++) {
+      const tt = t + i * rand(0.03, 0.07);
+      [1, 1.48, 2.21].forEach((m, j) => chain(tone(c, 'sine', base * m * rand(0.995, 1.005), tt, 0.3), envG(c, tt, 0.001, 0.1 * k / (j + 1), 0.18), out));
+    }
+  },
+  meow(c, out, t, o = {}) {
+    const kind = o.kind || 'normal';
+    let p = (o.pitch || 1) * rand(0.94, 1.06), dur = o.dur || rand(0.55, 0.85), vol = o.vol || 1, att = 0.07;
+    if (kind === 'insistent') { p *= 1.12; dur = rand(0.75, 1.0); vol *= 1.15; }
+    if (kind === 'yowl') { p *= 1.55; dur = 0.45; vol *= 1.4; att = 0.015; }
+    if (kind === 'mrrp') { p *= 1.05; dur = 0.28; vol *= 0.8; }
+    const f0 = 470 * p;
+    const src = c.createOscillator(); src.type = 'sawtooth'; const fr = src.frequency;
+    fr.setValueAtTime(f0 * 0.85, t); fr.linearRampToValueAtTime(f0 * 1.3, t + dur * 0.35);
+    fr.linearRampToValueAtTime(f0 * 1.05, t + dur * 0.7); fr.linearRampToValueAtTime(f0 * 0.72, t + dur);
+    const vib = c.createOscillator(); vib.frequency.value = rand(5, 7.5); const vg = c.createGain(); vg.gain.value = f0 * 0.025; vib.connect(vg); vg.connect(fr);
+    const g = c.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + att); g.gain.setValueAtTime(0.9, t + dur * 0.62); g.gain.linearRampToValueAtTime(0, t + dur);
+    if (kind === 'mrrp') { const tr = c.createOscillator(); tr.frequency.value = 28; const tg = c.createGain(); tg.gain.value = 0.5; tr.connect(tg); tg.connect(g.gain); tr.start(t); tr.stop(t + dur); }
+    const mix = c.createGain(); mix.gain.value = 1.6 * vol;
+    const F = [[[800, 1500, 650], 5, 1.0], [[1900, 2700, 1300], 8, 0.6], [[3600, 3600, 3300], 10, 0.25]];
+    for (const [fs, Q, amp] of F) {
+      const b = filt(c, 'bandpass', fs[0], Q); b.frequency.setValueAtTime(fs[0], t); b.frequency.linearRampToValueAtTime(fs[1], t + dur * 0.35); b.frequency.linearRampToValueAtTime(fs[2], t + dur);
+      const a = c.createGain(); a.gain.value = amp; g.connect(b); b.connect(a); a.connect(mix);
+    }
+    const n = noiseSrc(c, t, dur), ng = c.createGain(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.05, t + 0.05); ng.gain.linearRampToValueAtTime(0, t + dur);
+    chain(n, filt(c, 'bandpass', 2500, 1), ng, mix);
+    src.connect(g); mix.connect(out);
+    src.start(t); src.stop(t + dur + 0.05); vib.start(t); vib.stop(t + dur + 0.05);
+  },
+  eat(c, out, t) {
+    chain(noiseSrc(c, t, 0.05), filt(c, 'bandpass', rand(1800, 2800), 2), envG(c, t, 0.002, 0.3, 0.04), out);
+    const s = c.createOscillator(); s.frequency.setValueAtTime(220, t); s.frequency.exponentialRampToValueAtTime(120, t + 0.05);
+    chain(s, envG(c, t, 0.002, 0.12, 0.05), out); s.start(t); s.stop(t + 0.08);
+  },
+  fur(c, out, t) { chain(noiseSrc(c, t, 0.8), filt(c, 'lowpass', 1500), envG(c, t, 0.15, 0.32, 0.45), out); },
+};
+// persistent purr (returns its level gain)
+function makePurr(c, out) {
+  const n = loopNoise(c), lp = filt(c, 'lowpass', 380, 0.7);
+  const am = c.createGain(); am.gain.value = 0.5;
+  const lfo = c.createOscillator(); lfo.frequency.value = 25; const lg = c.createGain(); lg.gain.value = 0.5; lfo.connect(lg); lg.connect(am.gain);
+  const tn = c.createOscillator(); tn.type = 'sawtooth'; tn.frequency.value = 25; const tg = c.createGain(); tg.gain.value = 0.35;
+  chain(tn, filt(c, 'lowpass', 160), tg, am);
+  const lvl = c.createGain(); lvl.gain.value = 0;
+  const boost = c.createGain(); boost.gain.value = 1.7;
+  chain(n, lp, am, boost, lvl, out); lfo.start(); tn.start();
+  return lvl;
+}
+
+// static sound emitters (landmarks)
+const SRC = {
+  fridge: [2.1, 0.4, -1.65], sink: [-1.0, 0.86, -1.75], clock: [2.45, 1.9, 0.3],
+  kettle: [0.7, 1.0, -1.7], door: [-2.45, 1.2, 1.05], radiator: [0, 0.5, 1.9],
+};
+const PAN_PARAMS = { fridge: [0.8, 1.2], sink: [0.5, 1.1], clock: [0.8, 1.0], kettle: [0.4, 1.3], door: [0.9, 1.1], radiator: [0.6, 1.2] };
+const G_ = (c, v) => { const g = c.createGain(); g.gain.value = v; return g; };
+const LOOPS = {   // continuous landmark beds
+  fridge(c, out) {
+    const fg = G_(c, 0.55); fg.connect(out);
+    chain(tone(c, 'sine', 50, 0, 1e5), G_(c, 0.05), fg);
+    chain(tone(c, 'sine', 100, 0, 1e5), G_(c, 0.035), fg);
+    chain(tone(c, 'sawtooth', 50, 0, 1e5), filt(c, 'lowpass', 260), G_(c, 0.03), fg);
+    chain(loopNoise(c), filt(c, 'bandpass', 180, 1), G_(c, 0.08), fg);
+    return fg;
+  },
+  door(c, out) {   // rain on the door glass + draught under the door
+    chain(loopNoise(c), filt(c, 'bandpass', 3000, 0.5), G_(c, 0.05 * RAIN_GAIN), out);
+    chain(loopNoise(c), filt(c, 'lowpass', 600), G_(c, 0.05 * RAIN_GAIN), out);
+    const dr = filt(c, 'bandpass', 480, 9), dl = c.createOscillator(); dl.frequency.value = 0.11; const dlg = G_(c, 170); dl.connect(dlg); dlg.connect(dr.frequency); dl.start();
+    const dg = G_(c, 0.22 * RAIN_GAIN), gl = c.createOscillator(); gl.frequency.value = 0.07; const glg = G_(c, 0.12 * RAIN_GAIN); gl.connect(glg); glg.connect(dg.gain); gl.start();
+    chain(loopNoise(c), dr, dg, out);
+  },
+  kettle(c, out) { chain(loopNoise(c), filt(c, 'bandpass', 5200, 2), G_(c, 0.045), out); },
+};
+let RAIN_GAIN = 1;
+const PN = {};      // landmark panners
+const AMB = {};     // scheduler
+function initAudio() {
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+  bus.comp = AC.createDynamicsCompressor(); bus.comp.threshold.value = -12; bus.comp.ratio.value = 4;
+  bus.master = AC.createGain(); bus.master.gain.value = 1;
+  bus.muffle = filt(AC, 'lowpass', 20000, 0.7);
+  bus.world = AC.createGain(); bus.ambience = AC.createGain(); bus.ambience.gain.value = 0;
+  bus.self = AC.createGain();
+  bus.verb = AC.createConvolver();
+  const len = Math.floor(AC.sampleRate * 1.1), ir = AC.createBuffer(2, len, AC.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.4); }
+  bus.verb.buffer = ir;
+  const sendW = AC.createGain(); sendW.gain.value = 0.2; const sendS = AC.createGain(); sendS.gain.value = 0.1;
+  bus.ambience.connect(bus.world);
+  bus.world.connect(bus.muffle); bus.self.connect(bus.muffle);
+  bus.world.connect(sendW); bus.self.connect(sendS); sendW.connect(bus.verb); sendS.connect(bus.verb); bus.verb.connect(bus.muffle);
+  bus.muffle.connect(bus.master); bus.master.connect(bus.comp); bus.comp.connect(AC.destination);
+
+  const mk = (k, ref, roll, dest) => { const p = makePanner(AC, ...SRC[k], ref, roll); p.connect(dest); PN[k] = p; };
+  mk('fridge', 0.8, 1.2, bus.ambience); mk('sink', 0.5, 1.1, bus.ambience); mk('clock', 0.8, 1.0, bus.world);
+  mk('kettle', 0.4, 1.3, bus.ambience); mk('door', 0.9, 1.1, bus.ambience); mk('radiator', 0.6, 1.2, bus.ambience);
+  AMB.fridgeGain = LOOPS.fridge(AC, PN.fridge);
+  LOOPS.door(AC, PN.door);
+  LOOPS.kettle(AC, PN.kettle);
+  const t = AC.currentTime;
+  Object.assign(AMB, { nTick: t + 0.5, tock: false, nDrip: t + 1, nRain: t, nBub: t, nGurgle: t + 20 });
+  // cat emitter
+  CAT.pan = makePanner(AC, CAT.x, 0.25, CAT.z, 0.5, 1.1); CAT.pan.connect(bus.world);
+  CAT.purrLvl = makePurr(AC, CAT.pan);
+}
+function ambienceSchedule() {
+  const t = AC.currentTime, ahead = t + 0.25;
+  while (AMB.nTick < ahead) { S.tick(AC, PN.clock, AMB.nTick, { tock: AMB.tock }); AMB.tock = !AMB.tock; AMB.nTick += 1.0; }
+  if (G.ambOn) {
+    while (AMB.nDrip < ahead) { S.drip(AC, PN.sink, AMB.nDrip); AMB.nDrip += rand(1.3, 2.8); }
+    while (AMB.nRain < ahead) { S.raindrop(AC, PN.door, AMB.nRain); AMB.nRain += rand(0.03, 0.12); }
+    while (AMB.nBub < ahead) { S.bubble(AC, PN.kettle, AMB.nBub); AMB.nBub += rand(0.08, 0.5); }
+    if (t > AMB.nGurgle) { S.gurgle(AC, PN.radiator, t); AMB.nGurgle = t + rand(25, 50); }
+  } else { AMB.nDrip = AMB.nRain = AMB.nBub = ahead; }
+}
+// play(name, where, opts): where = [x,y,z] | 'cat' | null (self, non-spatial)
+function play(name, where, o = {}) {
+  if (!AC || SIM) return;
+  const t = o.at || (AC.currentTime + (o.delay || 0));
+  const g = AC.createGain(); g.gain.value = o.vol ?? 1;
+  if (where === 'cat') g.connect(CAT.pan);
+  else if (where) {
+    const p = makePanner(AC, where[0], where[1], where[2], o.ref || 0.6, o.roll || 1.1); g.connect(p); p.connect(bus.world);
+    setTimeout(() => { try { p.disconnect(); } catch (e) {} }, ((o.delay || 0) + (o.life || 4)) * 1000);
+  } else if (o.pan) { const sp = AC.createStereoPanner(); sp.pan.value = o.pan; g.connect(sp); sp.connect(bus.self); }
+  else g.connect(bus.self);
+  S[name](AC, g, t, o);
+}
+function muffle(f, tc = 0.3) { if (AC) bus.muffle.frequency.setTargetAtTime(f, AC.currentTime, tc); }
+function heartbeat(n) { for (let i = 0; i < n; i++) play('heartbeat', null, { delay: i * rand(0.75, 0.9), vol: 1 - i / (n + 2) }); }
+
+/* =====================================================================
+   VOICE — the old person's mutterings (speechSynthesis)
+   ===================================================================== */
+const VO = { v: null, cur: null, pri: -1, q: [], keep: [], started: 0, noVoices: false };
+function pickVoice() {
+  if (!('speechSynthesis' in window)) return;
+  const vs = speechSynthesis.getVoices(); if (!vs.length) return;
+  const prefs = ['Daniel', 'Arthur', 'Malcolm', 'Oliver', 'Google UK English Male', 'Microsoft George', 'Microsoft Ryan', 'Fred', 'Ralph'];
+  let v = null;
+  for (const p of prefs) { v = vs.find(x => x.name.includes(p) && /^en/i.test(x.lang)); if (v) break; }
+  v = v || vs.find(x => /en[-_]GB/i.test(x.lang)) || vs.find(x => /^en/i.test(x.lang)) || vs[0];
+  VO.v = v; VO.noVoices = false; log('voice:', v && v.name, v && v.lang);
+}
+if ('speechSynthesis' in window) { speechSynthesis.onvoiceschanged = pickVoice; pickVoice(); }
+else { VO.noVoices = true; console.warn('[still-here] speechSynthesis not available — narration will be silent'); }
+const speaking = () => !!VO.cur;
+function say(text, o = {}) {
+  const pri = o.pri ?? 1;
+  if (o.delay) { later(o.delay, () => say(text, { pri })); return; }
+  if (SIM) { G.said.push(text); return; }
+  log('🗣', text);
+  G.lastLine = text;
+  if (!('speechSynthesis' in window)) return;
+  if (VO.cur) {
+    if (pri > VO.pri) { VO.q = []; VO.cur = null; speechSynthesis.cancel(); setTimeout(() => speakNow(text, pri), 140); }
+    else if (pri >= 1 && VO.q.length < 2) VO.q.push({ text, pri });
+    return;
+  }
+  speakNow(text, pri);
+}
+function speakNow(text, pri) {
+  const u = new SpeechSynthesisUtterance(text);
+  if (VO.v) { u.voice = VO.v; u.lang = VO.v.lang; } else u.lang = 'en-GB';
+  u.rate = 0.86; u.pitch = 0.78; u.volume = 1;
+  const done = () => {
+    VO.keep = VO.keep.filter(x => x !== u);
+    if (VO.cur !== u) return;
+    VO.cur = null; VO.pri = -1; duck(false);
+    const n = VO.q.shift(); if (n) setTimeout(() => { if (!VO.cur) speakNow(n.text, n.pri); }, 280);
+  };
+  u.onend = done; u.onerror = done;
+  u.onstart = () => duck(true);
+  VO.cur = u; VO.pri = pri; VO.started = performance.now(); VO.keep.push(u);
+  speechSynthesis.speak(u);
+}
+function duck(on) { if (AC && G.ambOn) bus.ambience.gain.setTargetAtTime(on ? 0.6 : 1, AC.currentTime, 0.25); }
+function voiceWatchdog() { if (VO.cur && performance.now() - VO.started > 14000) { VO.cur = null; VO.pri = -1; VO.q = []; try { speechSynthesis.cancel(); } catch (e) {} } }
+const TALK = {};
+function talk(id, arr, pri = 1, cool = 5) {
+  const L = TALK[id] || (TALK[id] = { i: 0, t: -99 });
+  if (now - L.t < cool) return false;
+  L.t = now;
+  const line = L.i < arr.length ? arr[L.i] : arr[1 + Math.floor(Math.random() * (arr.length - 1))] || arr[0];
+  L.i++; say(line, { pri }); return true;
+}
+const SAID = new Set();
+function once(key, text, pri = 1) { if (SAID.has(key)) return false; SAID.add(key); say(text, { pri }); return true; }
+
+/* =====================================================================
+   WORLD — invisible geometry that drives collision, touch and outlines
+   ===================================================================== */
+const box = (x0, y0, z0, x1, y1, z1) => ({ type: 'box', min: [x0, y0, z0], max: [x1, y1, z1] });
+const cyl = (cx, cy, cz, r, h) => ({ type: 'cyl', c: [cx, cy, cz], r, h, min: [cx - r, cy, cz - r], max: [cx + r, cy + h, cz + r] });
+const OBJ = {}, objects = [];
+let colPlayer = [], colCat = [];
+function addObj(o) { o.touches = 0; o.lastBump = -99; objects.push(o); OBJ[o.id] = o; rebuildCols(); return o; }
+function removeObj(id) { const i = objects.findIndex(o => o.id === id); if (i >= 0) objects.splice(i, 1); delete OBJ[id]; rebuildCols(); }
+function rebuildCols() {
+  colPlayer = []; colCat = [];
+  for (const o of objects) if (o.col) for (const b of o.col) { colPlayer.push({ o, b }); if (o.catBlock) colCat.push({ o, b }); }
+}
+const isTop = hit => hit.n && hit.n[1] > 0.5;
+
+function buildKitchen() {
+  // room shell
+  const wallLines = ["Wall.", "Just the wall.", "The wallpaper's lifting there.", "Wall. Cold."];
+  addObj({ id: 'wallN', mat: 'wall', R: 0.75, parts: [box(-2.5, 0, -2.15, 2.5, 2.4, -2)], col: [[-3, -2.5, 3, -2]], catBlock: true, lines: wallLines });
+  addObj({ id: 'wallS', mat: 'wall', R: 0.75, parts: [box(-2.5, 0, 2, 2.5, 2.4, 2.15)], col: [[-3, 2, 3, 2.5]], catBlock: true, lines: wallLines });
+  addObj({ id: 'wallE', mat: 'wall', R: 0.75, parts: [box(2.5, 0, -2, 2.65, 2.4, 2)], col: [[2.5, -2.5, 3, 2.5]], catBlock: true,
+    reach(o, hit) { if (hit.p[2] > -0.4 && hit.p[2] < 1.0) talk('clock', ["The clock's up there somewhere. Can't reach it.", "Tick, tock."], 1, 8); else talk('wall', wallLines); } });
+  addObj({ id: 'wallW', mat: 'wall', R: 0.75, parts: [box(-2.65, 0, -2, -2.5, 2.4, 2)], col: [[-3, -2.5, -2.5, 2.5]], catBlock: true, lines: wallLines });
+  addObj({ id: 'door', mat: 'door', R: 0.7, parts: [box(-2.52, 0, 0.6, -2.49, 2.05, 1.5), box(-2.5, 0.02, 0.95, -2.47, 0.24, 1.15)],
+    col: [[-2.6, 0.6, -2.49, 1.5]], catBlock: true,
+    reach(o, hit) {
+      if (hit.p[1] < 0.3) { talk('flap', ["Her cat flap.", "Cat flap. She won't go out in this."], 1); play('knock', hit.p, { f: 520, gain: 0.5 }); }
+      else talk('door', ["The back door. Feel that draught.", "Cold glass. Still raining.", "Back door."]);
+    },
+    bump() { talk('door', ["The back door. Feel that draught.", "Cold glass. Still raining.", "Back door."]); } });
+  addObj({ id: 'floor', mat: 'floor', R: 0.4, parts: [box(-2.5, -0.1, -2, 2.5, 0, 2)], noBump: true,
+    reach(o, hit) { if (surfaceAt(hit.p[0], hit.p[2]) === 'rug') talk('rug', ["The rug.", "Rug. Needs a hoover."], 0); else talk('floor', ["The floor.", "Cold tiles.", "Floor."], 0); } });
+
+  // counters along the north wall
+  const worktop = ["The worktop.", "Worktop. Crumbs everywhere.", "Worktop."];
+  const cup = (id, x0, x1, hinge, extra) => addObj(Object.assign({ id, kind: 'cup', mat: 'wood', R: 0.75, parts: [box(x0, 0, -2, x1, 0.9, -1.4)],
+    col: [[x0, -2.1, x1, -1.4]], catBlock: true, open: false, feels: 0, hinge, x0, x1, reach: cupReach,
+    bump(o) { talk(o.id + 'b', o.bumpLines || ["A cupboard.", "Cupboard."], 1, 7); } }, extra));
+  cup('cupA', -2.5, -1.5, 'L', { bumpLines: ["Cupboards. The pans are along here."] });
+  cup('cupB', -1.5, -0.5, 'R', { bumpLines: ["Under the sink.", "The sink's above me."] });
+  cup('cupC', -0.5, 0.4, 'R', { bumpLines: ["A cupboard.", "Cupboard."] });
+  addObj({ id: 'breadbin', mat: 'wood', R: 0.4, small: true, parts: [box(-2.2, 0.9, -1.95, -1.75, 1.15, -1.62)],
+    lines: ["Bread bin.", "Just bread, Pudding. You don't like bread."] });
+  addObj({ id: 'oven', mat: 'metal', R: 0.65, parts: [box(0.4, 0, -2, 1.0, 0.9, -1.4)], col: [[0.4, -2.1, 1.0, -1.4]], catBlock: true,
+    reach(o, hit) { if (isTop(hit)) burn(hit.p); else talk('oven', ["The oven door.", "Oven. Cold, at least."]); },
+    bump() { talk('oven', ["The oven door.", "Oven. Cold, at least."]); } });
+  addObj({ id: 'kettle', mat: 'metal', R: 0.35, small: true, parts: [cyl(0.7, 0.9, -1.7, 0.1, 0.22)], reach(o, hit) { burn(hit.p); } });
+  addObj({ id: 'bin', mat: 'metal', R: 0.45, small: true, parts: [cyl(1.35, 0, -1.75, 0.17, 0.45)], col: [[1.18, -1.92, 1.52, -1.58]], catBlock: true,
+    lines: ["The bin.", "Bin. Smells like it wants emptying."],
+    bump(o, p) { play('clang', p, { f: 300, gain: 0.5, decay: 0.5 }); talk('bin', ["The bin.", "Bin. Smells like it wants emptying."]); } });
+  addObj({ id: 'fridge', mat: 'metal', R: 0.8, parts: [box(1.7, 0, -2, 2.5, 1.85, -1.35)], col: [[1.7, -2.1, 2.6, -1.35]], catBlock: true,
+    reach(o, hit) {
+      if (!G.fridgeOpened) { G.fridgeOpened = 1; talk('fridge0', ["The fridge."]); return; }
+      if (G.fridgeOpened === 1) {
+        G.fridgeOpened = 2; play('fridgePop', hit.p); AMB.fridgeGain.gain.setTargetAtTime(1.0, AC.currentTime, 0.2);
+        say("Milk... butter. Nothing for you in here, madam.", { pri: 1 }); catMeow('insistent', 1.2);
+        later(3.0, () => { play('thud', hit.p, { strength: 0.5 }); AMB.fridgeGain.gain.setTargetAtTime(0.55, AC.currentTime, 0.2); G.fridgeOpened = 3; });
+        return;
+      }
+      talk('fridge2', ["Nothing in the fridge for you. I told you.", "The fridge."], 1);
+    },
+    bump() { talk('fridgeb', ["The fridge.", "Fridge. Humming away."]); } });
+
+  // table, chairs
+  const legs = (x0, z0, x1, z1, top, w = 0.045) => [box(x0, 0, z0, x0 + w, top, z0 + w), box(x1 - w, 0, z0, x1, top, z0 + w), box(x0, 0, z1 - w, x0 + w, top, z1), box(x1 - w, 0, z1 - w, x1, top, z1)];
+  addObj({ id: 'table', mat: 'wood', R: 0.9, parts: [box(-0.6, 0.71, -0.2, 0.6, 0.76, 0.6), ...legs(-0.58, -0.18, 0.58, 0.58, 0.71)],
+    col: [[-0.6, -0.2, 0.6, 0.6]], lines: ["The table.", "Table.", "The table. Sticky."], bump: tableBump });
+  addObj({ id: 'glass', mat: 'glass', R: 0.25, small: true, parts: [cyl(0.45, 0.76, -0.08, 0.035, 0.12)],
+    reach(o, hit) { play('clink', hit.p, { f: 2900, gain: 0.6 }); talk('glass', ["My glass of water.", "Careful with that.", "Glass. Mind it."]); } });
+  addObj({ id: 'chairMine', mat: 'wood', R: 0.6, parts: [box(-0.22, 0.42, 0.85, 0.22, 0.46, 1.25), box(-0.22, 0.46, 1.21, 0.22, 0.95, 1.25), ...legs(-0.21, 0.86, 0.21, 1.24, 0.42, 0.035)],
+    col: [[-0.22, 0.85, 0.22, 1.25]], lines: ["My chair.", "My chair. Still warm."] });
+  addObj({ id: 'chairOther', mat: 'wood', R: 0.6, parts: [box(-1.15, 0.42, 0.0, -0.75, 0.46, 0.4), box(-1.15, 0.46, 0.0, -1.11, 0.95, 0.4), ...legs(-1.14, 0.01, -0.76, 0.39, 0.42, 0.035)],
+    col: [[-1.15, 0.0, -0.75, 0.4]], lines: ["The other chair.", "Nobody sits there anymore.", "A chair."] });
+  addObj({ id: 'radiator', mat: 'metal', R: 0.6, parts: [box(-0.5, 0.15, 1.88, 0.5, 0.8, 1.98)], col: [[-0.5, 1.86, 0.5, 2.1]], catBlock: true,
+    lines: ["Radiator. Barely warm.", "Radiator."] });
+  addObj({ id: 'bucket', mat: 'metal', R: 0.45, small: true, parts: [cyl(1.15, 0, -0.65, 0.17, 0.3)], col: [[0.98, -0.82, 1.32, -0.48]], catBlock: true,
+    reach() { play('clang', bucketPos(), { f: 520, gain: 0.4 }); talk('bucketr', ["The mop bucket.", "Mop bucket."]); },
+    bump(o, p, sp) {
+      play('clang', p, { f: 480, gain: 1.0, decay: 1.1 });
+      talk('bucket', ["The mop bucket! Who left that there?", "...Me, probably.", "That bucket again."], 2, 4);
+      pushBucket(sp); if (sp > 0.55) stumble(0.7);
+    } });
+  addObj({ id: 'foodBowl', mat: 'ceramic', R: 0.3, small: true, parts: [cyl(-2.15, 0, 1.75, 0.11, 0.06)], reach: bowlReach });
+  addObj({ id: 'waterBowl', mat: 'ceramic', R: 0.3, small: true, parts: [cyl(-2.15, 0, 1.38, 0.1, 0.06)],
+    reach(o, hit) { play('clink', hit.p, { f: 1100, gain: 0.5 }); talk('water', G.waterSpilt ? ["Her water bowl. Empty now. Blast."] : ["Water bowl. Still got water.", "Her water."]); } });
+}
+function bucketPos() { const c = OBJ.bucket.parts[0].c; return [c[0], 0.3, c[2]]; }
+function pushBucket(sp) {
+  const b = OBJ.bucket, c = b.parts[0].c, dx = c[0] - P.x, dz = c[2] - P.z, d = hyp(dx, dz) || 1, k = 0.08 + sp * 0.12;
+  const nx = clamp(c[0] + dx / d * k, -2.2, 2.2), nz = clamp(c[2] + dz / d * k, -1.15, 1.8);
+  b.parts = [cyl(nx, 0, nz, 0.17, 0.3)]; b.col = [[nx - 0.17, nz - 0.17, nx + 0.17, nz + 0.17]]; rebuildCols();
+}
+function tableBump(o, p, sp) {
+  const gp = [0.45, 0.82, -0.08];
+  if (G.glass === 'table') {
+    G.glass = 'wobble'; play('clink', gp, { f: 2900, gain: 0.9 }); later(0.12, () => play('clink', gp, { f: 3000, gain: 0.5 }));
+    if (OBJ.glass) touchObject(OBJ.glass, gp, { R: 0.3, noGlance: true });
+    say("Careful— my glass...", { pri: 2 });
+  } else if (G.glass === 'wobble' && sp > 0.25) {
+    G.glass = 'broken'; removeObj('glass');
+    play('clink', gp, { f: 2800 });
+    later(0.42, () => {
+      const fp = [0.62, 0.02, -0.38]; play('smash', fp, { life: 3 }); rumble(0.5, 0.3, 200);
+      G.shards = { x: 0.62, z: -0.38, r: 0.42 };
+      const pts = []; for (let i = 0; i < 160; i++) { const a = rand(6.3), r = Math.sqrt(Math.random()) * 0.42; pts.push([0.62 + Math.cos(a) * r, 0.005, -0.38 + Math.sin(a) * r, rand(0.4, 1)]); }
+      emitSet(pts, fp, { R: Infinity, life: 1.6, speed: 2.5 });
+      catFlee(); catMeow('yowl', 0.3);
+      say("Oh, no. No, no, no...", { pri: 3 });
+      later(3.5, () => say("Glass everywhere now. Mind your feet.", { pri: 1 }));
+    });
+  } else talk('table', o.lines);
+}
+function cupReach(o, hit) {
+  // the sink itself is on top of cupB; anywhere else on a unit, your hand finds its way down to the door
+  if (isTop(hit) && o.id === 'cupB' && hit.p[0] > -1.35 && hit.p[0] < -0.65 && !o.open) {
+    play('pat', hit.p, { f: 1400, gain: 0.5 });
+    if (talk('sink', ["The sink. Cold.", "That tap. Drip, drip, drip.", "Sink."], 1, 4)) return;
+  }
+  if (isTop(hit) && !o.open && !TALK['wt' + o.id]) { TALK['wt' + o.id] = 1; say(pick(["Worktop... cupboards underneath.", "The worktop. Cupboard below."]), { pri: 0 }); }
+  if (!o.open) return openCup(o, hit.p);
+  feelCup(o, hit.p);
+}
+function openCup(o, p) {
+  o.open = true; play('creak', p, { dur: rand(0.6, 0.9) }); play('knock', p, { f: 260, gain: 0.3, delay: 0.7 });
+  const x = o.hinge === 'L' ? o.x0 : o.x1 - 0.03;
+  addObj({ id: o.id + 'Door', mat: 'wood', R: 0.5, parts: [box(x, 0.05, -1.4, x + 0.03, 0.85, -0.95)], col: [[x - 0.01, -1.4, x + 0.04, -0.95]], catBlock: true,
+    reach() { closeCup(o); },
+    bump() { talk(o.id + 'door', ["Ow— a door. Who left that open?", "...Me. I did.", "That door."], 2, 4); } });
+  if (o.id === 'cupA') say("Pans cupboard.", { pri: 1 });
+  if (o.id === 'cupB') say("Under the sink...", { pri: 1 });
+  if (o.id === 'cupC') { say("Now then...", { pri: 1 }); G.progT = Math.max(G.progT, now - 20); }
+}
+function closeCup(o) {
+  const d = OBJ[o.id + 'Door']; const p = d ? [d.parts[0].min[0], 0.5, -1.2] : [o.x0, 0.5, -1.4];
+  play('creak', p, { dur: 0.35, gain: 0.7 }); play('knock', p, { f: 240, gain: 0.7, delay: 0.32 });
+  removeObj(o.id + 'Door'); o.open = false; talk('shut', ["Shut that.", "There."], 0);
+}
+function feelCup(o, p) {
+  play('rustle', p); o.feels++;
+  if (o.id === 'cupA') { play('clang', p, { f: 380, gain: 0.6, delay: 0.2 }); talk('feelA', ["Pans. Just pans.", "Pans."]); }
+  else if (o.id === 'cupB') { play('knock', p, { f: 420, gain: 0.4, delay: 0.2 }); talk('feelB', ["Bleach... cloths. Not in here.", "Not that. Not in here."]); }
+  else if (o.id === 'cupC') {
+    if (P.hasTin) { talk('feelC2', ["More beans. Who eats all these beans?"]); return; }
+    if (o.feels === 1) { play('clink', p, { f: 1500, gain: 0.5, delay: 0.25 }); say("Beans. Not beans...", { pri: 1 }); }
+    else takeTin(p);
+  }
+}
+function takeTin(p) {
+  P.hasTin = true; play('tinPick', p); rumble(0.3, 0.2, 120);
+  say("Ah. Here we are. Fish. You can smell it, can't you?", { pri: 3 });
+  setStage('tin');
+  catMeow('mrrp', 0.5); catMeow('insistent', 1.4); catSetMode('feet');
+}
+function bowlReach(o, hit) {
+  if (P.hasTin && !G.fed) return feed();
+  play('clink', hit.p, { f: 1000, gain: 0.6 });
+  talk('bowl', ["Her bowl. Empty. Licked clean.", "I know, I know.", "Empty bowl."]);
+}
+
+/* =====================================================================
+   RAY / COLLISION
+   ===================================================================== */
+function rayBox(o, d, mn, mx) {
+  let tmin = -Infinity, tmax = Infinity, ax = -1, sg = 0;
+  for (let a = 0; a < 3; a++) {
+    if (Math.abs(d[a]) < 1e-9) { if (o[a] < mn[a] || o[a] > mx[a]) return null; continue; }
+    let t1 = (mn[a] - o[a]) / d[a], t2 = (mx[a] - o[a]) / d[a], s = -1;
+    if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; s = 1; }
+    if (t1 > tmin) { tmin = t1; ax = a; sg = s; }
+    tmax = Math.min(tmax, t2); if (tmin > tmax) return null;
+  }
+  if (tmax < 0 || tmin < 0) return null;
+  return { t: tmin, axis: ax, sign: sg };
+}
+function rayWorld(o, d, maxT) {
+  let best = null;
+  for (const ob of objects) for (const part of ob.parts) {
+    const h = rayBox(o, d, part.min, part.max);
+    if (h && h.t <= maxT && (!best || h.t < best.t)) best = { o: ob, part, t: h.t, axis: h.axis, sign: h.sign };
+  }
+  if (best) { best.p = [o[0] + d[0] * best.t, o[1] + d[1] * best.t, o[2] + d[2] * best.t]; best.n = [0, 0, 0]; best.n[best.axis] = best.sign; }
+  return best;
+}
+function fatRay(o, d, maxT, filter, rad = 0.16) {   // forgiving reach for small things
+  let best = null;
+  for (const ob of objects) {
+    if (!filter(ob)) continue;
+    for (const part of ob.parts) for (let t = 0.1; t <= maxT; t += 0.04) {
+      const p = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
+      const c = [clamp(p[0], part.min[0], part.max[0]), clamp(p[1], part.min[1], part.max[1]), clamp(p[2], part.min[2], part.max[2])];
+      const dd = hyp(p[0] - c[0], p[1] - c[1], p[2] - c[2]);
+      if (dd < rad) { const sc = dd + t * 0.05; if (!best || sc < best.sc) best = { o: ob, part, t, sc, p: c, n: [0, 1, 0] }; break; }
+    }
+  }
+  return best;
+}
+function collideCircle(x, z, r, list) {
+  let hit = null;
+  for (let pass = 0; pass < 2; pass++) for (const c of list) {
+    const [x0, z0, x1, z1] = c.b, cx = clamp(x, x0, x1), cz = clamp(z, z0, z1);
+    const dx = x - cx, dz = z - cz, d = hyp(dx, dz);
+    if (d < r) {
+      if (d < 1e-6) { const l = x - x0, rr = x1 - x, t = z - z0, b = z1 - z, m = Math.min(l, rr, t, b); if (m === l) x = x0 - r; else if (m === rr) x = x1 + r; else if (m === t) z = z0 - r; else z = z1 + r; }
+      else { x = cx + dx / d * r; z = cz + dz / d * r; }
+      if (!hit) hit = { o: c.o, cx, cz };
+    }
+  }
+  return { x, z, hit };
+}
+function contactY(o, x, z) {
+  let top = 0;
+  for (const part of o.parts) if (x >= part.min[0] - 0.06 && x <= part.max[0] + 0.06 && z >= part.min[2] - 0.06 && z <= part.max[2] + 0.06) top = Math.max(top, part.max[1]);
+  return clamp(top || 0.8, 0.05, 0.85) - 0.02;
+}
+function surfaceAt(x, z) {
+  if (G.shards && hyp(x - G.shards.x, z - G.shards.z) < G.shards.r) return 'glass';
+  for (const w of G.wets) if (hyp(x - w.x, z - w.z) < w.r) return 'wet';
+  if (x > -1.2 && x < 1.2 && z > -0.6 && z < 1.5) return 'rug';
+  return 'tile';
+}
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+const P = { x: 0, z: 1.05, yaw: 0, pitch: -0.22, roll: 0, rollT: 0, eye: EYE_SIT, eyeT: EYE_SIT, vx: 0, vz: 0,
+  stepAcc: 0, foot: 1, busy: true, stumbleT: -99, falls: 0, glance: null, lastLook: -99, lastMove: 0, lastReach: -99,
+  hasTin: false, bumps: 0, surface: 'rug', wetT: 0, lastWhoosh: -99, anim: null, wobble: null, bob: 0, flinch: 0 };
+const G = { stage: 'pre', started: false, progT: 0, hintI: 0, glass: 'table', shards: null, wets: [{ x: -0.5, z: -1.05, r: 0.3 }],
+  waterSpilt: false, fridgeOpened: 0, fed: false, ambOn: true, said: [], lastLine: '', kickT: -99 };
+const timers = [];
+function later(s, fn) { timers.push({ t: now + s, fn }); }
+function setStage(s) { G.stage = s; G.progT = now; G.hintI = 0; log('stage →', s); }
+const fwd = () => [-Math.sin(P.yaw), -Math.cos(P.yaw)];
+const rgt = () => [Math.cos(P.yaw), -Math.sin(P.yaw)];
+
+const HINTS = {
+  seated: [[12, "Come on, then. Up we get."], [32, "Alright, alright. I'm getting up."], [60, "My poor knees... Come on. Up."], [100, "Up. Come on, old thing."]],
+  up: [[16, "What is it, Pudding? Hungry, are you?"], [40, "Your tea. Of course it is. Now, where are your tins..."],
+       [70, "The cupboard by the sink. Just past it, I think."], [105, "Listen... that tap. The sink's there. Your tins are in the next cupboard along."],
+       [150, "Follow her. She knows where they are."], [210, "Past the sink... the next cupboard along. Open it up."], [280, "Where the tap drips. Just to the right of it."]],
+  tin: [[3, "Now then. Your bowl."], [30, "By the back door, isn't it. Where the draught comes in."],
+        [65, "Hear the rain on the glass? Your bowl's just there, by the door."], [105, "Where are you, Pudding? Go on. Show me."],
+        [170, "The back door... down on the floor, by the door."]],
+};
+function hints() {
+  const H = HINTS[G.stage]; if (!H || P.busy || speaking()) return;
+  const h = H[G.hintI]; if (!h) return;
+  if (now - G.progT > h[0]) { say(h[1], { pri: 1 }); G.hintI++; if (G.stage !== 'seated') catMeow(G.hintI > 2 ? 'insistent' : 'normal', 1.5); }
+}
+
+/* =====================================================================
+   PLAYER
+   ===================================================================== */
+function standUp() {
+  if (G.stage !== 'seated' || P.busy) return;
+  P.busy = true;
+  play('scrape', [0, 0.1, 1.05]); play('kneeCreak', null, { delay: 0.5 }); play('breath', null, { delay: 0.2 });
+  say("Oof... up we get.", { pri: 2 });
+  P.eyeT = EYE_STAND; P.anim = { x0: P.x, z0: P.z, x1: 0.55, z1: 1.15, t0: now + 0.4, dur: 1.8 };
+  later(2.4, () => { P.busy = false; P.anim = null; setStage('up'); play('step', null, { surface: 'rug', pan: 0.15 }); });
+}
+function stumble(sev = 1, quiet = false) {
+  if (P.busy) return;
+  const chain2 = now - P.stumbleT < 4;
+  P.stumbleT = now;
+  if (chain2) { fall(); return; }
+  P.wobble = { t0: now, amp: 0.13 * sev }; P.vx *= 0.15; P.vz *= 0.15;
+  heartbeat(3); play('breath', null, { gain: 1.2 }); rumble(0.6, 0.4, 250);
+  if (!quiet) once('stumble1', "Whoa— steady. Steady...", 2) || (Math.random() < 0.5 && say(pick(["Steady...", "Careful.", "Oh— easy."]), { pri: 2 }));
+}
+function fall() {
+  if (P.busy) return;
+  P.busy = true; P.falls++; P.vx = P.vz = 0; P.wobble = null;
+  play('thud', [P.x, 0.1, P.z], { strength: 1.6 }); play('thud', null, { strength: 1.0, delay: 0.25 }); rumble(1, 1, 500);
+  P.eyeT = EYE_FLOOR; P.rollT = 0.42; P.pitchSave = P.pitch; muffle(520, 0.25); heartbeat(8);
+  const L = [["Oh— oh dear. Oh dear...", "Come on. Up you get, you silly old thing."],
+             ["Not again... not again.", "Up. Come on. Up."],
+             ["I'm alright. I'm alright, Pudding.", "Slowly. Slowly does it."]];
+  const l = L[Math.min(P.falls - 1, L.length - 1)];
+  say(l[0], { pri: 3 });
+  later(2.5, () => { catSetMode('rub'); });
+  later(5.0, () => say(l[1], { pri: 2 }));
+  later(6.2, () => { P.eyeT = EYE_STAND; P.rollT = 0; play('kneeCreak'); play('breath', null, { gain: 1.3 }); });
+  later(8.6, () => { muffle(20000, 1.2); P.busy = false; P.stumbleT = -99; });
+}
+function burn(p) {
+  if (P.busy) return;
+  play('sizzle', p); play('clang', p, { f: 700, gain: 0.3, decay: 0.3 }); rumble(0.9, 0.9, 300);
+  say("Ah! Hot— hot!", { pri: 3 }); P.flinch = 1; muffle(1800, 0.05); later(0.8, () => muffle(20000, 0.6));
+  const f = fwd(); const r = collideCircle(P.x - f[0] * 0.15, P.z - f[1] * 0.15, PR, colPlayer); P.x = r.x; P.z = r.z;
+  stumble(0.8, true);
+  later(2.6, () => once('kettle', "Was the kettle left on? I don't remember putting it on...", 1));
+}
+function bump(o, c, sp) {
+  if (o.noBump || now - o.lastBump < 1.1) return;
+  o.lastBump = now; P.bumps++;
+  const p = [c.cx, contactY(o, c.cx, c.cz), c.cz];
+  const hard = clamp(sp / WALK, 0.3, 1.2);
+  if (o.mat === 'wall' || o.mat === 'door') play('pat', p, { gain: 0.9 * hard, f: 700 });
+  else if (o.mat === 'metal') play('clang', p, { f: 340, gain: 0.35 * hard, decay: 0.6 });
+  else play('knock', p, { gain: 0.9 * hard });
+  if (sp > 0.45) play('thud', p, { strength: 0.5 * hard });
+  touchObject(o, p, { R: o.R });
+  rumble(0.25 + hard * 0.3, 0.1, 120);
+  if (o.bump) o.bump(o, p, sp); else if (o.lines) talk(o.id, o.lines, 1, 6);
+  if (sp > 0.7 && Math.random() < 0.35) say(pick(["Ow.", "Ooh, my hip.", "Ow— blast."]), { pri: 2 });
+  if (P.bumps === 4) say("Slowly does it...", { pri: 1, delay: 1.2 });
+}
+function updatePlayer(dt, mv, lookX, lookY) {
+  // look
+  if (lookX) P.yaw -= lookX;   // turning doesn't interrupt a glance; looking up/down takes over from it
+  if (lookY) { if (P.glance) { P.pitch = P.glance.back; P.glance = null; } P.pitch = clamp(P.pitch - lookY, -1.3, 0.9); P.lastLook = now; }
+  if (P.glance) {   // look toward the touch, hold while it glows, then look back
+    const g = P.glance, t = now - g.t0;
+    P.pitch = lerp(P.pitch, t < 1.7 ? g.pitch : g.back, 1 - Math.exp(-dt * (t < 1.7 ? 4 : 2.5)));
+    if (t > 3.2) { P.pitch = g.back; P.glance = null; }
+  }
+  if (P.turn) { const a = P.turn, t = ease((now - a.t0) / a.dur); P.yaw = lerp(a.y0, a.y1, t); P.pitch = lerp(a.p0, a.p1, t); if (t >= 1) P.turn = null; }
+  // scripted motion (standing up)
+  if (P.anim) { const a = P.anim, t = ease((now - a.t0) / a.dur); P.x = lerp(a.x0, a.x1, t); P.z = lerp(a.z0, a.z1, t); }
+  if (G.stage === 'seated' && !P.busy && hyp(mv[0], mv[1]) > 0.3) standUp();
+  let speed = 0;
+  if (!P.busy && G.stage !== 'seated' && G.stage !== 'pre' && G.stage !== 'intro') {
+    const f = fwd(), r = rgt(); let mx = mv[0], mz = mv[1]; const ml = hyp(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+    const slow = (now - P.stumbleT < 1.2 ? 0.3 : 1) * (mz < 0 ? 0.6 : 1); // backwards is slower
+    const tvx = (f[0] * mz + r[0] * mx) * WALK * slow, tvz = (f[1] * mz + r[1] * mx) * WALK * slow;
+    const k = 1 - Math.exp(-dt * 5);
+    P.vx = lerp(P.vx, tvx, k); P.vz = lerp(P.vz, tvz, k);
+    speed = hyp(P.vx, P.vz);
+    const res = collideCircle(P.x + P.vx * dt, P.z + P.vz * dt, PR, colPlayer);
+    if (res.hit) { if (speed > 0.18) bump(res.hit.o, res.hit, speed); P.vx *= 0.3; P.vz *= 0.3; }
+    const moved = hyp(res.x - P.x, res.z - P.z);
+    P.x = res.x; P.z = res.z;
+    if (ml > 0.1) P.lastMove = now;
+    // footsteps & surfaces
+    P.stepAcc += moved;
+    const sf = surfaceAt(P.x, P.z);
+    if (sf !== P.surface) onSurface(sf, P.surface, speed);
+    P.surface = sf;
+    if (P.stepAcc > 0.5) { P.stepAcc = 0; P.foot = -P.foot; play('step', null, { surface: sf, pan: 0.18 * P.foot, gain: 0.8 + speed * 0.3 }); }
+    // pressing on across a wet floor ends badly; stopping, or backing out slowly, is safe
+    if (sf === 'wet' && speed > 0.2) { P.wetT += dt; if (P.wetT > 1.0) { P.wetT = 0; stumble(1); } } else P.wetT = Math.max(0, P.wetT - dt);
+    // bowls underfoot
+    kickCheck();
+    // the cat underfoot
+    const cdx = CAT.x - P.x, cdz = CAT.z - P.z, cd = hyp(cdx, cdz);
+    if (speed > 0.3 && cd < 0.34 && (cdx * P.vx + cdz * P.vz) / (cd * speed + 1e-6) > 0.2 && now - CAT.lastUnder > 15 && G.stage !== 'fed') {
+      CAT.lastUnder = now; catMeow('yowl'); catFlee(); sampleCat(CAT.x, CAT.z, CAT.h, null, { life: 1.2 });
+      say(pick(["Pudding! You'll have me over!", "Get from under my feet!", "Mind! Silly cat."]), { pri: 3 });
+      stumble(1.1);
+    }
+    // wandering moves the pitch gently back to the horizon for keyboard players
+    if (speed > 0.2 && now - P.lastLook > 2.0 && !P.glance) P.pitch = lerp(P.pitch, -0.12, 1 - Math.exp(-dt * 0.9));
+  }
+  P.speed = speed;
+  // eye height, roll, wobble, bob
+  P.eye = lerp(P.eye, P.eyeT, 1 - Math.exp(-dt * (P.eyeT < P.eye ? 7 : 1.6)));
+  P.roll = lerp(P.roll, P.rollT, 1 - Math.exp(-dt * 4));
+  P.bob += speed * dt * 7.5;
+  P.flinch = Math.max(0, P.flinch - dt * 3);
+}
+function onSurface(sf, prev, sp) {
+  if (sf === 'wet') {
+    play('splash', null, { gain: 1 }); rumble(0.3, 0.6, 150);
+    if (!once('wet1', "Whoa— wet. The sink's leaking again.", 2)) say(pick(["Wet. Careful.", "That puddle..."]), { pri: 1 });
+    if (sp > 0.45) stumble(0.9);
+  }
+  if (sf === 'glass') {
+    play('crunch', null, { gain: 1.2 }); rumble(0.4, 0.6, 120);
+    if (!once('glass1', "Glass! Mind your feet, mind your feet...", 3)) say("Glass.", { pri: 1 });
+    stumble(0.6);
+  }
+}
+function kickCheck() {
+  if (now - G.kickT < 1.5) return;
+  const wb = OBJ.waterBowl.parts[0].c, fb = OBJ.foodBowl.parts[0].c;
+  if (hyp(P.x - wb[0], P.z - wb[2]) < 0.29) {
+    G.kickT = now; const p = [wb[0], 0.05, wb[2]];
+    touchObject(OBJ.waterBowl, p, { R: 0.3 }); play('clink', p, { f: 1100 }); play('knock', p, { f: 380, gain: 0.5 });
+    if (!G.waterSpilt) { G.waterSpilt = true; play('splash', p, { gain: 0.9 }); G.wets.push({ x: wb[0] + 0.25, z: wb[2], r: 0.25 }); say("Oh, blast. Her water.", { pri: 2 }); }
+    else talk('wbk', ["Her water bowl.", "That bowl again."]);
+  } else if (hyp(P.x - fb[0], P.z - fb[2]) < 0.29) {
+    G.kickT = now; const p = [fb[0], 0.05, fb[2]];
+    touchObject(OBJ.foodBowl, p, { R: 0.3 }); play('clink', p, { f: 1000 }); play('knock', p, { f: 400, gain: 0.5 });
+    if (P.hasTin && !G.fed) { say("Her bowl! Right. Down we go then...", { pri: 2 }); later(1.4, feed); }
+    else talk('fbk', ["Her bowl— under my foot.", "Her bowl."]);
+  }
+}
+function reach() {
+  if (G.stage === 'end') { location.reload(); return; }
+  if (P.busy && G.stage !== 'intro') return;
+  if (now - P.lastReach < 0.45) return;
+  P.lastReach = now;
+  // arms, not eyes: reach from the chest, angled a little below where you're facing
+  const standing = P.eye > 1.3;
+  const o = [camera.position.x, camera.position.y - (standing ? 0.28 : 0.15), camera.position.z];
+  const rp = clamp((P.glance ? P.glance.back : P.pitch) - (standing ? 0.32 : 0.05), -1.45, 0.7);
+  const d = [-Math.sin(P.yaw) * Math.cos(rp), Math.sin(rp), -Math.cos(P.yaw) * Math.cos(rp)];
+  const okH = p => hyp(p[0] - P.x, p[2] - P.z) <= 1.0;
+  const maxT = 1.9;
+  let hit = rayWorld(o, d, maxT); if (hit && !okH(hit.p)) hit = null;
+  // whatever you're pressed up against wins, wherever you happen to be looking
+  {
+    const f = fwd(); let probe = null;
+    for (let dd = PR; dd <= 0.75 && !probe; dd += 0.04) {
+      const px = P.x + f[0] * dd, pz = P.z + f[1] * dd;
+      for (const c of colPlayer) { const [x0, z0, x1, z1] = c.b; if (px >= x0 && px <= x1 && pz >= z0 && pz <= z1) { probe = { o: c.o, dd, p: [px, contactY(c.o, px, pz), pz] }; break; } }
+    }
+    if (probe) {
+      const hd = hit ? hyp(hit.p[0] - P.x, hit.p[2] - P.z) : 1e9;
+      const sameAndClose = hit && hit.o === probe.o && hd <= probe.dd + 0.5;   // e.g. the table top in front of you
+      if (!sameAndClose && hd > probe.dd + 0.05) hit = { o: probe.o, t: probe.dd, p: probe.p, n: [-f[0], 0, -f[1]], part: probe.o.parts[0] };
+    }
+  }
+  let small = fatRay(o, d, maxT, ob => ob.small); if (small && !okH(small.p)) small = null;
+  if (!small) {   // bending to feel for small things near your feet, roughly in front
+    const f = fwd(); let bestD = 1e9;
+    for (const ob of objects) {
+      if (!ob.small) continue;
+      const pt = ob.parts[0], cx = (pt.min[0] + pt.max[0]) / 2, cz = (pt.min[2] + pt.max[2]) / 2;
+      if (pt.max[1] > 0.5) continue;               // only low things
+      const dx = cx - P.x, dz = cz - P.z, hd = hyp(dx, dz);
+      if (hd > 0.85 || hd < 1e-3) continue;
+      if ((dx * f[0] + dz * f[1]) / hd < 0.82) continue;   // within ~35° of facing
+      if (hd < bestD) { bestD = hd; small = { o: ob, part: pt, t: hd, p: [cx, pt.max[1], cz], n: [0, 1, 0] }; }
+    }
+    if (small && hit && hit.o.id !== 'floor' && !/^wall/.test(hit.o.id) && hyp(hit.p[0] - P.x, hit.p[2] - P.z) < bestD) small = null;
+    if (small && hit && (hit.o.id === 'floor' || /^wall/.test(hit.o.id))) hit = small;
+  }
+  // the cat — a soft sphere around her body
+  let catT = null;
+  { const c = [CAT.x, 0.22, CAT.z]; const oc = [c[0] - o[0], c[1] - o[1], c[2] - o[2]]; const t = oc[0] * d[0] + oc[1] * d[1] + oc[2] * d[2];
+    if (t > 0 && t < maxT) { const q = [o[0] + d[0] * t - c[0], o[1] + d[1] * t - c[1], o[2] + d[2] * t - c[2]]; if (hyp(...q) < 0.27 && hyp(c[0] - P.x, c[2] - P.z) < 1.05) catT = t; } }
+  if (catT !== null && (!hit || catT < hit.t + 0.2 || hit.o.id === 'floor') && (!small || catT < small.t + 0.1)) { strokeCat(); return 'cat'; }
+  if (small && (!hit || hit.o.id === 'floor' || small.t < hit.t + 0.12)) hit = small;
+  play('whoosh', null, { gain: 0.5 });
+  if (!hit) {
+    if (now - P.lastWhoosh > 7 && Math.random() < 0.6) { say(pick(["Nothing there.", "Hm. Nothing.", "Where was I..."]), { pri: 0 }); P.lastWhoosh = now; }
+    return null;
+  }
+  const ob = hit.o; ob.touches++;
+  const m = ob.mat;
+  if (m === 'wood') play('knock', hit.p, { gain: 0.45, delay: 0.08 });
+  else if (m === 'metal') play('clang', hit.p, { f: 600, gain: 0.15, decay: 0.4, delay: 0.08 });
+  else if (m === 'glass' || m === 'ceramic') play('clink', hit.p, { f: m === 'glass' ? 2800 : 1100, gain: 0.35, delay: 0.08 });
+  else play('pat', hit.p, { gain: 0.6, delay: 0.08 });
+  touchObject(ob, hit.p, { R: ob.R });
+  rumble(0.15, 0.1, 60);
+  if (ob.reach) ob.reach(ob, hit); else if (ob.lines) talk(ob.id, ob.lines);
+  return ob.id;
+}
+
+/* =====================================================================
+   THE CAT
+   ===================================================================== */
+const CAT = { x: 0.05, z: 0.45, h: 0, spd: 0, mode: 'feet', modeT: 0, orbitA: 1.2, purr: 0, purrHold: 0, nextMeow: 1e9,
+  bellAcc: 0, lastRub: -99, lastUnder: -99, stuckT: 0, fx: 0, fz: 0, wx: 0, wz: 0, prevMode: 'feet', nextEat: 0, pan: null, purrLvl: null };
+function catSetMode(m) { if (CAT.mode !== m) { if (m === 'wander') CAT.prevMode = CAT.mode; CAT.mode = m; CAT.modeT = now; } }
+function catMeow(kind = 'normal', delay = 0) { if (SIM) return; play('meow', 'cat', { kind, delay }); }
+function catFlee() { const dx = CAT.x - P.x, dz = CAT.z - P.z, d = hyp(dx, dz) || 1; CAT.fx = clamp(CAT.x + dx / d * 1.6, -2.2, 2.2); CAT.fz = clamp(CAT.z + dz / d * 1.6, -1.2, 1.8); catSetMode('flee'); }
+function leadPoint() {   // where she waits; she steps aside (away from the puddle) as you arrive
+  const tin = G.stage === 'tin', b = tin ? [-1.85, 1.62] : [-0.05, -1.2];
+  if (hyp(P.x - b[0], P.z - b[1]) < 0.9) return tin ? [-1.75, 1.05] : [0.55, -1.15];
+  return b;
+}
+function catTarget() {
+  switch (CAT.mode) {
+    case 'feet': { const r = 0.6; return [clamp(P.x + Math.cos(CAT.orbitA) * r, -2.3, 2.3), clamp(P.z + Math.sin(CAT.orbitA) * r, -1.25, 1.8)]; }
+    case 'lead': return leadPoint();
+    case 'rub': { const f = fwd(), sd = Math.sin(now * 1.3) * 0.12; const r = rgt(); return [P.x + f[0] * 0.42 + r[0] * sd, P.z + f[1] * 0.42 + r[1] * sd]; }
+    case 'flee': return [CAT.fx, CAT.fz];
+    case 'wander': return [CAT.wx, CAT.wz];
+    case 'eat': return [-1.9, 1.75];
+    default: return [CAT.x, CAT.z];
+  }
+}
+function catBrain() {
+  const st = G.stage, m = CAT.mode, inMode = now - CAT.modeT;
+  const dP = hyp(CAT.x - P.x, CAT.z - P.z);
+  if (st === 'fed' || st === 'end') { if (m !== 'eat') catSetMode('eat'); return; }
+  if (m === 'flee' && inMode > 1.6) catSetMode('feet');
+  if (m === 'wander' && inMode > 2.5) catSetMode(CAT.prevMode === 'wander' ? 'feet' : CAT.prevMode);
+  if (m === 'rub') { if (inMode > 7 || (P.speed > 0.3 && dP > 0.6)) catSetMode('feet'); }
+  if (st === 'up' || st === 'tin') {
+    const lp = leadPoint(), dL = hyp(P.x - lp[0], P.z - lp[1]);
+    const leadDelay = Math.max(6, 22 - G.hintI * 5);
+    if (CAT.mode === 'feet' && inMode > leadDelay && dP < 2.5) catSetMode('lead');
+    if (CAT.mode === 'lead' && inMode > 18 && dL > 2.3 && G.hintI < 4) catSetMode('feet');
+    if (CAT.mode === 'feet' && now - P.lastMove > 3.5 && now - CAT.lastRub > 16 && dP < 1.5 && !P.busy) catSetMode('rub');
+  }
+}
+function updateCat(dt) {
+  catBrain();
+  // usually she slips out of your way; now and then she doesn't
+  {
+    const rx = CAT.x - P.x, rz = CAT.z - P.z, dist = hyp(rx, rz), sp = P.speed || 0;
+    if (dist > 1.0) CAT.dodgeRolled = false;
+    else if (sp > 0.3 && !CAT.dodgeRolled && CAT.mode !== 'flee' && CAT.mode !== 'eat') {
+      const vx = P.vx / sp, vz = P.vz / sp, ahead = rx * vx + rz * vz, lat = rx * vz - rz * vx;
+      if (ahead > 0 && Math.abs(lat) < 0.4 && dist < 0.85) {
+        CAT.dodgeRolled = true;
+        if (Math.random() < 0.8) { const s = lat >= 0 ? 1 : -1; CAT.wx = clamp(CAT.x + vz * 0.7 * s, -2.2, 2.2); CAT.wz = clamp(CAT.z - vx * 0.7 * s, -1.25, 1.8); catSetMode('wander'); }
+      }
+    }
+  }
+  CAT.orbitA += dt * (0.3 + 0.25 * Math.sin(now * 0.21));
+  const [tx, tz] = catTarget();
+  const dx = tx - CAT.x, dz = tz - CAT.z, d = hyp(dx, dz);
+  const still = (CAT.mode === 'lead' || CAT.mode === 'eat') && d < 0.1;
+  let want = (d < 0.06 || still) ? 0 : Math.min(CAT.mode === 'flee' ? 1.7 : 0.95, d * 1.8);
+  if (want > 0) CAT.h += clamp(wrapA(Math.atan2(dx, dz) - CAT.h), -5 * dt, 5 * dt);
+  CAT.spd = lerp(CAT.spd, want, 1 - Math.exp(-dt * 5));
+  const ox = CAT.x, oz = CAT.z;
+  const r = collideCircle(CAT.x + Math.sin(CAT.h) * CAT.spd * dt, CAT.z + Math.cos(CAT.h) * CAT.spd * dt, CATR, colCat);
+  let nx = r.x, nz = r.z;
+  const pdx = nx - P.x, pdz = nz - P.z, pd = hyp(pdx, pdz), minD = CAT.mode === 'rub' ? 0.2 : 0.3;
+  if (pd < minD && pd > 1e-4) { nx = P.x + pdx / pd * minD; nz = P.z + pdz / pd * minD; }
+  CAT.x = clamp(nx, -2.36, 2.36); CAT.z = clamp(nz, -1.86, 1.86);
+  const moved = hyp(CAT.x - ox, CAT.z - oz);
+  // stuck → pick a random spot and try again
+  if (want > 0.3 && moved < want * dt * 0.25) CAT.stuckT += dt; else CAT.stuckT = Math.max(0, CAT.stuckT - dt);
+  if (CAT.stuckT > 1.2) { CAT.stuckT = 0; CAT.wx = rand(-2, 2); CAT.wz = rand(-1, 1.7); catSetMode('wander'); }
+  // collar bell
+  CAT.bellAcc += moved;
+  if (CAT.bellAcc > 0.22) { CAT.bellAcc = 0; if (Math.random() < 0.8) play('bell', 'cat', { gain: CAT.spd > 1 ? 1.6 : 1 }); }
+  // rub against the legs
+  if (CAT.mode === 'rub' && hyp(CAT.x - P.x, CAT.z - P.z) < 0.48 && now - CAT.lastRub > 5) catRub();
+  // meows
+  if (now > CAT.nextMeow && !P.busy) {
+    const st = G.stage;
+    if (st === 'seated' || st === 'up' || st === 'tin') {
+      const atLead = CAT.mode === 'lead' && hyp(CAT.x - leadPoint()[0], CAT.z - leadPoint()[1]) < 0.3;
+      catMeow(atLead || G.hintI > 2 ? 'insistent' : pick(['normal', 'normal', 'mrrp']));
+      CAT.nextMeow = now + (atLead ? rand(3.5, 6) : rand(7, 13) - Math.min(G.hintI, 4));
+    } else CAT.nextMeow = now + 5;
+  }
+  // eating
+  if (CAT.mode === 'eat' && d < 0.12 && G.fed && now < G.eatUntil && now > CAT.nextEat) { play('eat', 'cat'); CAT.nextEat = now + rand(0.18, 0.34); }
+  // purr
+  const near = hyp(CAT.x - P.x, CAT.z - P.z) < 0.8;
+  const tgt = now < CAT.purrHold ? 0.9 : (G.fed ? 0.75 : (near && (G.stage === 'seated' || G.stage === 'intro') ? 0.25 : 0));
+  CAT.purr = lerp(CAT.purr, tgt, 1 - Math.exp(-dt * 1.5));
+  if (AC && CAT.pan && !SIM) {
+    setPannerPos(CAT.pan, CAT.x, 0.25, CAT.z);
+    CAT.purrLvl.gain.setTargetAtTime(CAT.purr * (0.55 + 0.45 * Math.sin(now * 3.4)), AC.currentTime, 0.08);
+  }
+}
+function catRub() {
+  CAT.lastRub = now; CAT.purrHold = now + 5;
+  const f = fwd(), r = rgt(), sg = Math.random() < 0.5 ? 1 : -1;
+  CAT.h = Math.atan2(r[0] * sg, r[1] * sg);   // side-on across your shins
+  play('fur', 'cat'); rumble(0.15, 0.05, 400);
+  sampleCat(CAT.x, CAT.z, CAT.h, [P.x + f[0] * 0.25, 0.2, P.z + f[1] * 0.25], { life: 2.2 });
+  if (G.stage !== 'intro' && Math.random() < 0.55) say(pick(["Yes, I know.", "Alright, alright.", "Mind my legs, you.", "Hello, sweetheart.", "I know. I know."]), { pri: 0 });
+  catSetMode('feet');
+}
+function strokeCat() {
+  CAT.purrHold = now + 6; play('fur', 'cat'); catMeow('mrrp', 0.2);
+  sampleCat(CAT.x, CAT.z, CAT.h, [CAT.x, 0.32, CAT.z], { life: 2.4 });
+  rumble(0.1, 0.05, 500);
+  talk('stroke', ["There she is.", "Good girl.", "Soft old thing.", "Yes. Yes, I know."], 1, 4);
+}
+
+/* =====================================================================
+   FEEDING / ENDING
+   ===================================================================== */
+function feed() {
+  if (G.fed) return;
+  G.fed = true; P.busy = true; P.hasTin = false; setStage('fed');
+  const bp = [-2.15, 0.06, 1.75];
+  P.eyeT = 0.9; // bend down
+  play('kneeCreak'); play('breath', null, { gain: 1.1 });
+  later(0.8, () => { play('ringPull', bp); touchObject(OBJ.foodBowl, bp, { R: 0.35, life: 2.6 }); });
+  later(1.8, () => play('scoop', bp)); later(2.5, () => play('scoop', bp)); later(3.1, () => play('clink', bp, { f: 950 }));
+  later(2.0, () => say("There we are. There you go, love.", { pri: 3 }));
+  CAT.purrHold = now + 60; G.eatUntil = now + 34; catSetMode('eat');
+  later(3.4, () => { sampleCat(CAT.x, CAT.z, CAT.h, null, { life: 3 }); P.eyeT = EYE_STAND * 0.92; });
+  later(9, () => say("Go on. Eat up.", { pri: 2 }));
+  later(14.5, () => say("We're alright, aren't we? You and me.", { pri: 2 }));
+  later(17, () => {   // straighten up and turn back toward the room
+    P.glance = null; P.eyeT = EYE_STAND;
+    const y = Math.atan2(-(0.6 - P.x), -(-0.6 - P.z));
+    P.turn = { y0: P.yaw, y1: P.yaw + wrapA(y - P.yaw), p0: P.pitch, p1: -0.08, t0: now, dur: 4.5 };
+  });
+  later(19, () => {
+    G.ambOn = false; if (AC) bus.ambience.gain.setTargetAtTime(0, AC.currentTime, 2.5);
+    revealRoom();
+  });
+  later(26, () => { sampleCat(CAT.x, CAT.z, CAT.h, null, { life: 4, bright: 0.8, noGlance: true }); });
+  later(30, () => say("...Good girl.", { pri: 2 }));
+  later(38, () => { CAT.purrHold = 0; if (AC) bus.master.gain.setTargetAtTime(0, AC.currentTime, 3); });
+  later(46, () => { G.stage = 'end'; P.busy = false; log('end'); });
+}
+function revealRoom() {   // a last, faint memory of the whole kitchen
+  const centre = [-2.0, 0.2, 1.7];
+  for (const o of objects) {
+    if (o.id === 'floor') continue;
+    const wall = o.mat === 'wall';
+    const pts = []; for (const part of o.parts) samplePart(part, centre, Infinity, pts, wall ? 0.12 : 0.6);
+    emitSet(pts, centre, { R: Infinity, life: 9, speed: 1.0, bright: wall ? 0.35 : 0.55, cap: 2200, delay0: 0.5 });
+  }
+}
+
+/* =====================================================================
+   CAMERA / GLANCE
+   ===================================================================== */
+function glanceTo(p) {   // reflexive glance toward what you touched, so the outline is seen
+  const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+  const hd = hyp(p[0] - cx, p[2] - cz), ang = Math.atan2(p[1] - cy, hd);
+  const vHalf = THREE.MathUtils.degToRad(FOV / 2), hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+  // pitch only — never turn the player, their sense of direction is all they have
+  const base = P.glance ? P.glance.back : P.pitch;
+  let tp = base;
+  if (ang < base - vHalf * 0.6) tp = clamp(ang + vHalf * 0.45, -1.25, 0.4);
+  if (ang > base + vHalf * 0.8) tp = clamp(ang - vHalf * 0.4, -1.25, 0.6);
+  if (Math.abs(tp - base) > 0.01) P.glance = { pitch: tp, back: base, t0: now };
+}
+function updateCamera() {
+  const bobY = Math.sin(P.bob) * 0.018 * (P.eyeT === EYE_STAND ? 1 : 0), bobR = Math.sin(P.bob * 0.5) * 0.006;
+  let wob = 0; if (P.wobble) { const t = now - P.wobble.t0; if (t > 1.4) P.wobble = null; else wob = Math.sin(t * 11) * P.wobble.amp * (1 - t / 1.4); }
+  camera.position.set(P.x, P.eye + bobY, P.z);
+  camera.rotation.set(P.pitch + P.flinch * 0.18, P.yaw, P.roll + bobR + wob);
+  camera.updateMatrixWorld();
+  if (AC && !SIM) {
+    const f = new THREE.Vector3(); camera.getWorldDirection(f);
+    const u = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+    setListener(AC.listener, [camera.position.x, camera.position.y, camera.position.z], [f.x, f.y, f.z], [u.x, u.y, u.z]);
+  }
+}
+
+/* =====================================================================
+   INPUT — mouse / keyboard / gamepad. No on-screen anything.
+   ===================================================================== */
+const keys = new Set();
+let mouseDX = 0, mouseDY = 0, mouseHeld = false;
+const PAD = { lx: 0, ly: 0, rx: 0, ry: 0, prev: false, gp: null };
+const REACH_KEYS = ['KeyE', 'Space', 'Enter', 'KeyF', 'NumpadEnter'];
+const keysMoving = () => ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'].some(c => keys.has(c)) || Math.abs(PAD.lx) + Math.abs(PAD.ly) > 0;
+addEventListener('keydown', e => {
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (!G.started) { start(); return; }
+  keys.add(e.code);
+  if (!e.repeat && REACH_KEYS.includes(e.code)) reach();
+});
+addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('blur', () => keys.clear());
+renderer.domElement.addEventListener('mousedown', e => {
+  if (!G.started) { start(); lockPointer(); return; }
+  if (document.pointerLockElement !== renderer.domElement) lockPointer();
+  if (e.button === 0) reach();
+  mouseHeld = true;
+});
+addEventListener('mouseup', () => mouseHeld = false);
+addEventListener('mousemove', e => {
+  if (document.pointerLockElement === renderer.domElement || mouseHeld) { mouseDX += e.movementX || 0; mouseDY += e.movementY || 0; }
+});
+addEventListener('contextmenu', e => e.preventDefault());
+function lockPointer() { try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+function pollPad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const gp of pads) {
+    if (!gp || !gp.connected) continue;
+    PAD.gp = gp;
+    const dz = v => Math.abs(v) < 0.18 ? 0 : (v - Math.sign(v) * 0.18) / 0.82;
+    PAD.lx = dz(gp.axes[0] || 0); PAD.ly = dz(gp.axes[1] || 0); PAD.rx = dz(gp.axes[2] || 0); PAD.ry = dz(gp.axes[3] || 0);
+    const pressed = [0, 1, 2, 3, 5, 7].some(i => gp.buttons[i] && gp.buttons[i].pressed);
+    if (pressed && !PAD.prev) { if (!G.started) start(); else reach(); }
+    PAD.prev = pressed;
+    return;
+  }
+  PAD.lx = PAD.ly = PAD.rx = PAD.ry = 0;
+}
+function rumble(strong, weak = 0.2, ms = 150) {
+  const a = PAD.gp && PAD.gp.vibrationActuator;
+  if (a && a.playEffect) a.playEffect('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: clamp(strong, 0, 1), weakMagnitude: clamp(weak, 0, 1) }).catch(() => {});
+}
+
+/* =====================================================================
+   START / INTRO
+   ===================================================================== */
+function start() {
+  if (G.started) return;
+  G.started = true;
+  initAudio(); if (AC.resume) AC.resume();
+  if ('speechSynthesis' in window) {  // unlock speech inside the gesture
+    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) {}
+    pickVoice();
+    setTimeout(() => { if (!speechSynthesis.getVoices().length) { VO.noVoices = true; console.warn('[still-here] no speech voices available — narration will be silent in this browser'); } }, 2500);
+  }
+  bus.ambience.gain.setValueAtTime(0, AC.currentTime); bus.ambience.gain.linearRampToValueAtTime(1, AC.currentTime + 5);
+  setStage('intro');
+  CAT.x = 0.05; CAT.z = 0.45; CAT.h = Math.PI / 2; catSetMode('feet');
+  later(2.2, () => catMeow('normal'));
+  later(4.0, () => { CAT.mode = 'rub'; catRubIntro(); });
+  later(6.2, () => say("Mm...? Oh. It's you.", { pri: 3 }));
+  later(9.2, () => catMeow('insistent'));
+  later(10.8, () => say("Is it that time already?", { pri: 3 }));
+  later(13.5, () => { P.busy = false; setStage('seated'); CAT.nextMeow = now + 6; });
+}
+function catRubIntro() {
+  CAT.x = 0.18; CAT.z = 0.62; CAT.h = -Math.PI / 2;
+  CAT.lastRub = now; CAT.purrHold = now + 6; play('fur', 'cat');
+  sampleCat(CAT.x, CAT.z, CAT.h, [0.05, 0.2, 0.8], { life: 2.6 });
+  catSetMode('feet');
+}
+
+/* =====================================================================
+   LOOP
+   ===================================================================== */
+let lastT = performance.now(), hpT = 0;
+camera.position.set(P.x, P.eye, P.z); camera.rotation.set(P.pitch, P.yaw, 0); camera.updateMatrixWorld();
+buildKitchen();
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016); lastT = ts;
+  step(dt);
+  pMat.uniforms.uTime.value = now;
+  if (pDirty) { aPos.needsUpdate = aBirth.needsUpdate = aLife.needsUpdate = aSize.needsUpdate = aBright.needsUpdate = true; pDirty = false; }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+function step(dt) {
+  now += dt;
+  pollPad();
+  if (!G.started) {
+    updateCamera();
+    if (now > hpT) { emitHeadphones(); hpT = now + 2.2; }
+    return;
+  }
+  // timers
+  for (let i = timers.length - 1; i >= 0; i--) if (timers[i].t <= now) { const t = timers.splice(i, 1)[0]; try { t.fn(); } catch (e) { console.error(e); } }
+  // input
+  const k = c => keys.has(c) ? 1 : 0;
+  const mv = [k('KeyD') - k('KeyA') + PAD.lx, k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - PAD.ly];
+  const turn = (k('ArrowLeft') + k('KeyQ') - k('ArrowRight') - k('KeyZ')) * 1.9 * dt - PAD.rx * 2.3 * dt;
+  let lookX = mouseDX * 0.0022 - turn, lookY = mouseDY * 0.0022 + PAD.ry * 1.6 * dt;
+  mouseDX = mouseDY = 0;
+  updatePlayer(dt, mv, lookX, lookY);
+  updateCat(dt);
+  hints();
+  if (AC) ambienceSchedule();
+  voiceWatchdog();
+  updateCamera();
+}
+requestAnimationFrame(frame);
+
+/* =====================================================================
+   DEBUG / SELF-TESTS (console: __game.*)
+   ===================================================================== */
+async function testPan() {
+  const res = {};
+  for (const [label, yaw] of [['facing -z', 0], ['turned 180°', Math.PI]]) {
+    const c = new OfflineAudioContext(2, 44100, 44100);
+    const f = [-Math.sin(yaw), 0, -Math.cos(yaw)];
+    setListener(c.listener, [0, 1.5, 0], f, [0, 1, 0]);
+    const p = makePanner(c, 1, 1.5, 0); p.connect(c.destination);
+    const n = c.createBufferSource(); n.buffer = nb(c); n.connect(p); n.start(0);
+    const buf = await c.startRendering();
+    const rms = ch => { const d = buf.getChannelData(ch); let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i]; return Math.sqrt(s / d.length); };
+    res[label] = { L: +rms(0).toFixed(4), R: +rms(1).toFixed(4), louder: rms(1) > rms(0) ? 'right' : 'left' };
+  }
+  return res; // source at +x: expect "right" facing -z, "left" after turning
+}
+async function testLevels() {
+  const out = {};
+  const opts = { meow: [{}, { kind: 'insistent' }, { kind: 'yowl' }, { kind: 'mrrp' }] };
+  for (const name of Object.keys(S)) {
+    for (const o of (opts[name] || [{}])) {
+      const c = new OfflineAudioContext(1, 44100 * 2.5, 44100);
+      S[name](c, c.destination, 0.05, o);
+      const buf = await c.startRendering(); const d = buf.getChannelData(0);
+      let pk = 0, s = 0; for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > pk) pk = v; s += v * v; }
+      out[name + (o.kind ? ':' + o.kind : '')] = { peak: +pk.toFixed(3), rms: +Math.sqrt(s / d.length).toFixed(4) };
+    }
+  }
+  { const c = new OfflineAudioContext(1, 44100 * 2, 44100); const l = makePurr(c, c.destination); l.gain.value = 0.9;
+    const buf = await c.startRendering(); const d = buf.getChannelData(0); let pk = 0; for (const v of d) pk = Math.max(pk, Math.abs(v)); out.purr = { peak: +pk.toFixed(3) }; }
+  return out;
+}
+// loudness of each landmark (loop + its one-shots, through its panner) heard from a few places
+async function testLandmarks() {
+  const spots = { chair: [0, 1.12, 1.05], cupboard: [-0.05, 1.55, -1.15], midRoom: [0.3, 1.55, 0.0], nearBowl: [-1.6, 1.55, 1.6] };
+  const res = {};
+  for (const [spotName, L] of Object.entries(spots)) {
+    res[spotName] = {};
+    for (const k of ['fridge', 'sink', 'clock', 'kettle', 'door', 'radiator', 'cat1m']) {
+      const c = new OfflineAudioContext(2, 44100 * 4, 44100);
+      setListener(c.listener, L, [0, 0, -1], [0, 1, 0]);
+      const pos = k === 'cat1m' ? [L[0] + 1, 0.25, L[2]] : SRC[k];
+      const [ref, roll] = k === 'cat1m' ? [0.5, 1.1] : PAN_PARAMS[k];
+      const p = makePanner(c, ...pos, ref, roll); p.connect(c.destination);
+      if (LOOPS[k]) LOOPS[k](c, p);
+      for (let t = 0.1; t < 3.9;) {
+        if (k === 'sink') { S.drip(c, p, t); t += 2; }
+        else if (k === 'clock') { S.tick(c, p, t, {}); t += 1; }
+        else if (k === 'door') { S.raindrop(c, p, t); t += 0.075; }
+        else if (k === 'kettle') { S.bubble(c, p, t); t += 0.3; }
+        else if (k === 'radiator') { S.gurgle(c, p, t); t = 99; }
+        else if (k === 'cat1m') { S.meow(c, p, t, {}); t = 99; }
+        else t = 99;
+      }
+      const buf = await c.startRendering(); let s = 0, n = 0;
+      for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < d.length; i++) { s += d[i] * d[i]; n++; } }
+      res[spotName][k] = +(20 * Math.log10(Math.sqrt(s / n) + 1e-9)).toFixed(1);   // dBFS
+    }
+  }
+  return res;
+}
+function simulateCat(seconds = 180, stage = 'up') {
+  const save = { ...CAT, stage: G.stage, now }, saveP = { x: P.x, z: P.z, lastMove: P.lastMove, glance: P.glance };
+  SIM = true; G.stage = stage;
+  let outside = 0, maxStuck = 0, stuckRun = 0, lx = CAT.x, lz = CAT.z, insideFurn = 0;
+  const steps = Math.floor(seconds * 30);
+  for (let i = 0; i < steps; i++) {
+    now += 1 / 30;
+    if (i % 300 === 0) { P.x = rand(-1.8, 1.8); P.z = rand(-1.0, 1.6); const r = collideCircle(P.x, P.z, PR, colPlayer); P.x = r.x; P.z = r.z; P.lastMove = now; }
+    updateCat(1 / 30);
+    if (Math.abs(CAT.x) > 2.4 || Math.abs(CAT.z) > 1.9) outside++;
+    for (const c of colCat) { const [x0, z0, x1, z1] = c.b; if (CAT.x > x0 + 0.02 && CAT.x < x1 - 0.02 && CAT.z > z0 + 0.02 && CAT.z < z1 - 0.02) { insideFurn++; break; } }
+    const m = hyp(CAT.x - lx, CAT.z - lz); lx = CAT.x; lz = CAT.z;
+    if (m < 1e-4 && CAT.mode !== 'lead') stuckRun++; else stuckRun = 0; maxStuck = Math.max(maxStuck, stuckRun);
+  }
+  const result = { seconds, outsideFrames: outside, insideFurnitureFrames: insideFurn, longestStillSecs: +(maxStuck / 30).toFixed(1), finalMode: CAT.mode, lines: G.said.length };
+  SIM = false; Object.assign(CAT, save); Object.assign(P, saveP); G.stage = save.stage; now = save.now; G.said = [];
+  return result;
+}
+window.__game = { P, G, CAT, OBJ, objects, reach, start, standUp, feed, fall, stumble, testPan, testLevels, testLandmarks, simulateCat,
+  teleport(x, z, yaw = P.yaw, pitch = P.pitch) { P.x = x; P.z = z; P.yaw = yaw; P.pitch = pitch; P.glance = null; },
+  skipIntro() { timers.length = 0; P.busy = false; setStage('seated'); },
+  // deterministic stepping for tests: hold keys (codes) for `sec` seconds of game time, then render
+  advance(sec, hold = []) {
+    hold.forEach(c => keys.add(c));
+    for (let i = 0; i < Math.round(sec * 60); i++) step(1 / 60);
+    hold.forEach(c => keys.delete(c));
+    pMat.uniforms.uTime.value = now; aPos.needsUpdate = aBirth.needsUpdate = aLife.needsUpdate = aSize.needsUpdate = aBright.needsUpdate = true;
+    renderer.render(scene, camera);
+    return { x: +P.x.toFixed(2), z: +P.z.toFixed(2), yaw: +P.yaw.toFixed(2), pitch: +P.pitch.toFixed(2), stage: G.stage, line: G.lastLine, live: this.livePoints() };
+  },
+  voice: () => ({ voice: VO.v && VO.v.name, noVoices: VO.noVoices, count: 'speechSynthesis' in window ? speechSynthesis.getVoices().length : 0 }),
+  livePoints() { let n = 0; for (let i = 0; i < PMAX; i++) if (now - pBirth[i] > 0 && now - pBirth[i] < pLife[i]) n++; return n; },
+  get now() { return now; } };
+if (DEBUG) log('debug on');
+</script>
+</body>
+</html>
