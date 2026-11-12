@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Still Here</title>
+<style>html,body{margin:0;height:100%;background:#000;color:#666;font:14px system-ui,sans-serif;display:grid;place-items:center}a{color:#888}</style>
+<script>
+  // Phones and tablets get the mobile build, everything else the desktop build.
+  var touch = (navigator.maxTouchPoints || 0) > 0 && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+           || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  location.replace(touch ? 'stillhere_mobile/' : 'stillhere_desktop/');
+</script>
+</head>
+<body><p><a href="stillhere_desktop/">Desktop</a> &middot; <a href="stillhere_mobile/">Mobile</a></p></body>
+</html>
