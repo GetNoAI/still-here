@@ -14,18 +14,20 @@ namespace StillHere
         public float tilt;       // radians this frame, + = look up
         public bool reach;       // pressed this frame
         public bool any;         // anything at all (used to begin)
+        public bool gesture;     // a deliberate touch drag began (stands you up from the chair)
     }
 
     /// Keyboard + mouse, gamepad and touch, folded into one InputFrame. Nothing is ever drawn.
     ///
-    /// TOUCH SCHEME (phone/tablet, either orientation):
-    ///   - Left half of the screen:  put a thumb down and drag = walk. The spot you first touch is the centre
-    ///                               of an invisible stick; drag up to shuffle forward, sideways to sidestep.
-    ///   - Right half of the screen: drag = turn your head/body (left-right) and tilt it (up-down).
-    ///   - Quick tap anywhere:       reach out and touch.
-    ///   - Gentle haptics (see Haptics.cs) when you touch, bump into things, stumble, or the cats brush past.
-    /// Distances are measured as fractions of the screen's short side, so it feels the same on every phone
-    /// and at every pixel density (web builds report no real DPI).
+    /// TOUCH: one thumb, anywhere on the screen. No zones, no buttons.
+    ///   - Tap (any finger, even while another is walking): reach out and touch.
+    ///   - Slide sideways: turn. The turn follows your thumb (half the screen's short side is about a quarter
+    ///     turn) and stops when your thumb stops, so you never lose your heading.
+    ///   - Slide up and hold: walk forward. Further up is a little faster. Slide down: shuffle back.
+    ///     While walking, drifting well to one side steers.
+    ///   The first bit of movement decides between turning and walking, so a walking thumb that wanders
+    ///   doesn't quietly spin you. Lift and put it down again to switch.
+    /// Sizes are fractions of the screen's short side, so it feels the same on every phone.
     public class InputHub
     {
         // ---- test hooks
@@ -33,60 +35,90 @@ namespace StillHere
 
         public float mouseSens = 0.0022f, keyTurnRate = 1.9f, padTurnRate = 2.3f;
         // touch, in fractions of the screen's short side
-        public float stickRadius = 0.11f, stickDead = 0.15f, tapMaxTime = 0.3f, tapMaxMove = 0.035f;
-        public float touchTurn = 2.6f, touchTilt = 1.7f;   // radians for a drag the length of the short side
+        public float decide = 0.035f;          // movement before a drag counts as turning or walking
+        public float tapMaxTime = 0.3f, tapMaxMove = 0.035f;
+        public float turnPerShort = 3.2f;      // radians for a drag the length of the short side
+        public float walkRange = 0.13f;        // drag up this far for full walking pace
+        public float steerBand = 0.09f;        // while walking, sideways drift inside this band is ignored
 
-        public class Finger { public int id; public Vector2 start, last; public float t0; public bool leftSide; public float travelled; }
+        public enum Mode { Undecided, Turn, Walk }
+        public class Finger { public int id; public Vector2 start, last; public float t0; public float travelled; public Mode mode; public float steerFrom; }
         public readonly Dictionary<int, Finger> fingers = new Dictionary<int, Finger>();
-        Vector2 touchMove; Vector2 touchLook; bool touchTap;
+        int controller = -1;                   // the one finger that walks or turns; others can only tap
+        public float clock;                    // advanced by Poll's dt, so stepped tests time taps correctly
+        float turnDelta; bool tapped, gestured;
+        public Vector2 touchMove;
         bool padPrev; bool mouseHeld;
-        /// Set once a real touch is seen: from then on the browser's/OS's touch-to-mouse emulation is ignored,
-        /// so a tap is one reach (not two) and a drag turns once (not twice).
+        /// Set once a real touch is seen: from then on the browser's/OS's touch-to-mouse emulation is ignored.
         public bool touchSeen;
 
         public void Enable() { if (!EnhancedTouchSupport.enabled) EnhancedTouchSupport.Enable(); }
 
         public float screenShort = 0;
         float Short => screenShort > 0 ? screenShort : Mathf.Max(1, Mathf.Min(Screen.width, Screen.height));
+        public Finger Controller => controller >= 0 && fingers.TryGetValue(controller, out var f) ? f : null;
 
-        // ---- touch state machine (pure, so it can be driven by synthetic touches in tests)
-        public void TouchBegan(int id, Vector2 pos, float time, float screenW)
+        // ---- touch state machine (pure: tests drive it with synthetic positions)
+        public void TouchBegan(int id, Vector2 pos)
         {
-            fingers[id] = new Finger { id = id, start = pos, last = pos, t0 = time, leftSide = pos.x < screenW * 0.5f };
+            fingers[id] = new Finger { id = id, start = pos, last = pos, t0 = clock, mode = Mode.Undecided };
+            if (Controller == null) controller = id;
         }
         public void TouchMoved(int id, Vector2 pos)
         {
             if (!fingers.TryGetValue(id, out var f)) return;
-            Vector2 d = pos - f.last; f.travelled += d.magnitude; f.last = pos;
-            if (!f.leftSide) touchLook += d;
+            Vector2 step = pos - f.last; f.travelled += step.magnitude; f.last = pos;
+            if (id != controller) return;
+            Vector2 off = pos - f.start; float S = Short;
+            if (f.mode == Mode.Undecided)
+            {
+                if (off.magnitude <= decide * S) return;
+                f.mode = Mathf.Abs(off.x) > Mathf.Abs(off.y) ? Mode.Turn : Mode.Walk;
+                gestured = true;
+                if (f.mode == Mode.Turn) turnDelta += off.x / S * turnPerShort;     // include the movement it took to decide
+            }
+            else if (f.mode == Mode.Turn) turnDelta += step.x / S * turnPerShort;
+            else
+            {
+                // walking: steer only with sideways drift beyond the band, and then directly (finger distance = angle)
+                float band = steerBand * S, x = off.x;
+                float beyond = Mathf.Sign(x) * Mathf.Max(0, Mathf.Abs(x) - band);
+                turnDelta += (beyond - f.steerFrom) / S * turnPerShort;
+                f.steerFrom = beyond;
+            }
         }
-        public void TouchEnded(int id, Vector2 pos, float time)
+        public void TouchEnded(int id, Vector2 pos)
         {
             if (!fingers.TryGetValue(id, out var f)) return;
             TouchMoved(id, pos);
-            if (time - f.t0 <= tapMaxTime && f.travelled <= tapMaxMove * Short) touchTap = true;
+            if (clock - f.t0 <= tapMaxTime && f.travelled <= tapMaxMove * Short && f.mode == Mode.Undecided) tapped = true;
             fingers.Remove(id);
+            if (id == controller)
+            {
+                controller = -1;
+                // hand control to a finger still down, anchored where it is now: no jump
+                foreach (var o in fingers.Values) { controller = o.id; o.start = o.last; o.mode = Mode.Undecided; o.steerFrom = 0; o.t0 = clock; o.travelled = 0; break; }
+            }
         }
         /// A touch that began and ended between two frames: never seen as Began.
         public void TouchQuick(Vector2 start, Vector2 end, float duration)
         {
-            if (duration <= tapMaxTime && (end - start).magnitude <= tapMaxMove * Short) touchTap = true;
+            if (duration <= tapMaxTime && (end - start).magnitude <= tapMaxMove * Short) tapped = true;
         }
         void ResolveTouchMove()
         {
             touchMove = Vector2.zero;
-            foreach (var f in fingers.Values)
-            {
-                if (!f.leftSide) continue;
-                Vector2 d = (f.last - f.start) / (stickRadius * Short);
-                float m = d.magnitude; if (m < stickDead) continue;
-                touchMove = d / Mathf.Max(1f, m);
-            }
+            var f = Controller;
+            if (f == null || f.mode != Mode.Walk) return;
+            float y = (f.last.y - f.start.y) / (walkRange * Short);
+            if (Mathf.Abs(y) < 0.15f) return;
+            touchMove = new Vector2(0, Mathf.Clamp(y, -1, 1));
         }
 
         public InputFrame Poll(float dt)
         {
             var f = new InputFrame();
+            clock += dt;
             var kb = Keyboard.current; var ms = Mouse.current; var gp = Gamepad.current;
 
             if (kb != null)
@@ -105,18 +137,18 @@ namespace StillHere
                 foreach (var t in ETouch.activeTouches)
                 {
                     touchSeen = true;
-                    int id = t.touchId; float tnow = Time.unscaledTime;
+                    int id = t.touchId;
                     switch (t.phase)
                     {
                         case UnityEngine.InputSystem.TouchPhase.Began:
-                            TouchBegan(id, t.screenPosition, tnow, Screen.width); f.any = true; break;
+                            TouchBegan(id, t.screenPosition); f.any = true; break;
                         case UnityEngine.InputSystem.TouchPhase.Moved:
                         case UnityEngine.InputSystem.TouchPhase.Stationary:
-                            if (!fingers.ContainsKey(id)) { TouchBegan(id, t.startScreenPosition, tnow - (float)(t.time - t.startTime), Screen.width); f.any = true; }
+                            if (!fingers.ContainsKey(id)) { TouchBegan(id, t.startScreenPosition); fingers[id].t0 = clock - (float)(t.time - t.startTime); f.any = true; }
                             TouchMoved(id, t.screenPosition); break;
                         case UnityEngine.InputSystem.TouchPhase.Ended:
                         case UnityEngine.InputSystem.TouchPhase.Canceled:
-                            if (fingers.ContainsKey(id)) TouchEnded(id, t.screenPosition, tnow);
+                            if (fingers.ContainsKey(id)) TouchEnded(id, t.screenPosition);
                             else { f.any = true; if (t.phase == UnityEngine.InputSystem.TouchPhase.Ended) TouchQuick(t.startScreenPosition, t.screenPosition, (float)(t.time - t.startTime)); }
                             break;
                     }
@@ -142,10 +174,9 @@ namespace StillHere
             }
             ResolveTouchMove();
             f.move += touchMove;
-            f.turn += touchLook.x / Short * touchTurn;
-            f.tilt += touchLook.y / Short * touchTilt;
-            touchLook = Vector2.zero;
-            if (touchTap) { f.reach = true; f.any = true; touchTap = false; }
+            f.turn += turnDelta; turnDelta = 0;
+            if (tapped) { f.reach = true; f.any = true; tapped = false; }
+            if (gestured) { f.gesture = true; gestured = false; }
 
             f.move += debugMove; f.turn += debugTurnRate * dt;
             if (debugReach) { f.reach = true; f.any = true; debugReach = false; }

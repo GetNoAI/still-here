@@ -71,7 +71,16 @@ namespace StillHere
         // ------------------------------------------------------------------ per-frame
         void UpdatePlayer(float dt, InputFrame f)
         {
-            if (f.turn != 0) P.yaw += f.turn;                 // turning never interrupts a glance
+            if (f.turn != 0)
+            {
+                P.yaw += f.turn;                              // turning never interrupts a glance
+                // a quiet shuffle of the slippers for every 30 degrees turned on the spot, so a turn can be counted
+                if (stage != "seated" && stage != "intro" && stage != "pre" && !P.busy && P.speed < 0.15f)
+                {
+                    turnAcc += Mathf.Abs(f.turn);
+                    if (turnAcc > 0.52f) { turnAcc = 0; P.foot = -P.foot; SelfSfx(P.surface == "rug" ? "step_rug" : "step_tile", 0.32f, P.foot); if (input.touchSeen) Haptics.Play(Haptics.Feel.Tick); }
+                }
+            }
             if (f.tilt != 0)
             {
                 if (P.glance != null) { P.pitch = P.glance.back; P.glance = null; }
@@ -90,7 +99,7 @@ namespace StillHere
                 if (t >= 1) P.turn = null;
             }
             if (P.anim != null) { float t = Ease((now - P.anim.t0) / P.anim.dur); P.x = Mathf.Lerp(P.anim.x0, P.anim.x1, t); P.z = Mathf.Lerp(P.anim.z0, P.anim.z1, t); }
-            if (stage == "seated" && !P.busy && f.move.magnitude > 0.3f) StandUp();
+            if (stage == "seated" && !P.busy && (f.move.magnitude > 0.3f || f.gesture)) StandUp();   // any deliberate drag gets you up
 
             float speed = 0;
             if (!P.busy && stage != "seated" && stage != "pre" && stage != "intro")
@@ -143,6 +152,7 @@ namespace StillHere
             P.flinch = Mathf.Max(0, P.flinch - dt * 3);
         }
         float lastUnderAny = -99;
+        float turnAcc;
 
         public string SurfaceAt(float x, float z)
         {

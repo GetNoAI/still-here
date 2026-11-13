@@ -1,0 +1,13 @@
+{
+  "name": "Still Here",
+  "short_name": "Still Here",
+  "start_url": "index.html",
+  "display": "fullscreen",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "An old man, a dark kitchen, and two hungry cats. Play with headphones.",
+  "icons": [
+    { "src": "TemplateData/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "TemplateData/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
