@@ -23,7 +23,7 @@ namespace StillHere
             P.stumbleT = now;
             if (chain) { Fall(); return; }
             P.wobbleT0 = now; P.wobbleAmp = 0.13f * sev; P.vx *= 0.15f; P.vz *= 0.15f;
-            for (int i = 0; i < 3; i++) SelfSfx("heartbeat", 0.8f - i * 0.15f, 0, i * 0.8f); SelfSfx("breath", 0.8f); Rumble(0.6f, 0.4f, 0.25f);
+            for (int i = 0; i < 3; i++) SelfSfx("heartbeat", 0.8f - i * 0.15f, 0, i * 0.8f); SelfSfx("breath", 0.8f); Rumble(0.6f, 0.4f, 0.25f, Haptics.Feel.Knock);
             if (!quiet && !Once("stumble1", "stumble_1", 2) && UnityEngine.Random.value < 0.5f) Say(Pick("stumble_2", "stumble_3"), 2);
         }
 
@@ -31,7 +31,7 @@ namespace StillHere
         {
             if (P.busy) return;
             P.busy = true; P.falls++; P.vx = P.vz = 0; P.wobbleT0 = -99;
-            Sfx("fall", new Vector3(P.x, 0.1f, P.z), 1); Rumble(1, 1, 0.5f);
+            Sfx("fall", new Vector3(P.x, 0.1f, P.z), 1); Rumble(1, 1, 0.5f, Haptics.Feel.Heavy);
             P.eyeT = EyeFloor; P.rollT = 0.42f; Muffle(520, 8); for (int i = 0; i < 8; i++) SelfSfx("heartbeat", 1f - i * 0.09f, 0, i * 0.85f);
             int k = Mathf.Min(P.falls, 3);
             Say("fall_" + k + "a", 3);
@@ -44,7 +44,7 @@ namespace StillHere
         public void Burn(Vector3 p)
         {
             if (P.busy) return;
-            Sfx("sizzle", p); Rumble(0.9f, 0.9f, 0.3f);
+            Sfx("sizzle", p); Rumble(0.9f, 0.9f, 0.3f, Haptics.Feel.Burn);
             Say("burn", 3); P.flinch = 1; Muffle(1800, 30); Later(0.8f, () => Muffle(22000, 2));
             var f = Fwd(); var r = W.CollideCircle(P.x - f.x * 0.15f, P.z - f.y * 0.15f, PR, W.colPlayer); P.x = r.x; P.z = r.z;
             Stumble(0.8f, true);
@@ -62,7 +62,7 @@ namespace StillHere
             else Sfx("knock_wood", p, 0.9f * hard);
             if (sp > 0.45f) Sfx("bump_soft", p, 0.6f * hard);
             TouchObject(o, p);
-            Rumble(0.25f + hard * 0.3f, 0.1f, 0.12f);
+            Rumble(0.25f + hard * 0.3f, 0.1f, 0.12f, Haptics.Feel.Knock);
             if (o.bump != null) o.bump(o, p, sp); else if (o.lines != null) Talk(o.id, o.lines, 1, 6);
             if (sp > 0.7f && UnityEngine.Random.value < 0.35f) Say(Pick("ow_1", "ow_2"), 2);
             if (P.bumps == 4) Later(1.2f, () => Say("slowly", 1));
@@ -155,13 +155,13 @@ namespace StillHere
         {
             if (sf == "wet")
             {
-                SelfSfx("step_wet", 1.3f); Rumble(0.3f, 0.6f, 0.15f);
+                SelfSfx("step_wet", 1.3f); Rumble(0.3f, 0.6f, 0.15f, Haptics.Feel.Soft);
                 if (!Once("wet1", "wet_1", 2)) Say("wet_2", 1);
                 if (sp > 0.45f) Stumble(0.9f, true);
             }
             if (sf == "glass")
             {
-                SelfSfx("step_glass", 1.2f); Rumble(0.4f, 0.6f, 0.12f);
+                SelfSfx("step_glass", 1.2f); Rumble(0.4f, 0.6f, 0.12f, Haptics.Feel.Firm);
                 Once("glass1", "glass_step", 3);
                 Stumble(0.6f, true);
             }
@@ -196,7 +196,8 @@ namespace StillHere
         public string Reach()
         {
             if (stage == "end") { UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex); return null; }
-            if (!started || (P.busy && stage != "intro")) return null;
+            // nothing to reach for until you're on your feet: the opening narration plays undisturbed
+            if (!started || P.busy || stage == "pre" || stage == "intro" || stage == "seated") return null;
             if (now - P.lastReach < 0.45f) return null;
             P.lastReach = now;
             // arms, not eyes: reach from the chest, angled a little below where you're facing
@@ -282,7 +283,8 @@ namespace StillHere
                 default: Sfx("pat_wall", hit.p, 0.6f, 0.08f); break;
             }
             TouchObject(obj, hit.p);
-            Rumble(0.15f, 0.1f, 0.06f);
+            // what your fingertips meet: soft wood and walls, firm metal and china
+            Rumble(0.15f, 0.1f, 0.06f, obj.mat == Mat.Metal || obj.mat == Mat.Glass || obj.mat == Mat.Ceramic ? Haptics.Feel.Firm : Haptics.Feel.Soft);
             if (obj.reach != null) obj.reach(obj, hit); else if (obj.lines != null) Talk(obj.id, obj.lines);
             return obj.id;
         }

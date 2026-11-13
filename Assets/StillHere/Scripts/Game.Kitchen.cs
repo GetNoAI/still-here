@@ -122,7 +122,7 @@ namespace StillHere
                 glass = "broken"; W.Remove("glass"); Sfx("glass_clink", gp, 0.8f);
                 Later(0.42f, () =>
                 {
-                    var fp = new Vector3(0.62f, 0.02f, 0.38f); Sfx("glass_smash", fp); Rumble(0.5f, 0.3f, 0.2f);
+                    var fp = new Vector3(0.62f, 0.02f, 0.38f); Sfx("glass_smash", fp); Rumble(0.5f, 0.3f, 0.2f, Haptics.Feel.Knock);
                     hasShards = true; shards = new Vector2(0.62f, 0.38f); shardsR = 0.42f;
                     scratch.Clear();
                     for (int i = 0; i < 160; i++) { float a = Rand(0, 6.283f), r = Mathf.Sqrt(UnityEngine.Random.value) * 0.42f; scratch.Add(new Vector4(0.62f + Mathf.Cos(a) * r, 0.005f, 0.38f + Mathf.Sin(a) * r, Rand(0.4f, 1))); }

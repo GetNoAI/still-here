@@ -38,7 +38,7 @@ namespace StillHere
         void TakeTin(Vector3 p)
         {
             hasTin = true; portions = 2;
-            Sfx("tin_pick", p); Rumble(0.3f, 0.2f, 0.12f);
+            Sfx("tin_pick", p); Rumble(0.3f, 0.2f, 0.12f, Haptics.Feel.Firm);
             Say("tin_take", 3);
             SetStage("tin"); progT = now + 9;        // let the surprise play out before any hints
             var pud = cats[0]; Meow(pud, "mrrp", 0.5f); Meow(pud, "insistent", 1.4f); CatMode(pud, "feet");
@@ -61,7 +61,7 @@ namespace StillHere
             P.eyeT = 0.9f; P.glance = null;                 // bend down
             SelfSfx("knees"); SelfSfx("breath", 0.6f);
             if (first) Later(0.8f, () => Sfx("ring_pull", bp));
-            Later(first ? 1.9f : 0.9f, () => { Sfx("scoop", bp); TouchObject(W[who == 0 ? "bowlP" : "bowlB"], bp, new TouchOpt { R = 0.35f, life = 2.6f }); });
+            Later(first ? 1.9f : 0.9f, () => { Sfx("scoop", bp); Haptics.Play(Haptics.Feel.Soft); TouchObject(W[who == 0 ? "bowlP" : "bowlB"], bp, new TouchOpt { R = 0.35f, life = 2.6f }); });
             Later(first ? 2.9f : 1.9f, () => Sfx("bowl_clink", bp, 0.8f));
             Later(first ? 2.2f : 1.2f, () => Say(last ? "fed_last" : who == 0 ? "fed_first_p" : "fed_first_b", 3));
             c.purrHold = now + 60; eatUntil = now + 600; CatMode(c, "eat");

@@ -30,10 +30,19 @@ namespace StillHere
         public AudioProbe probe;
 
         /// True when an HRTF spatializer (Steam Audio) is active; otherwise sounds are panned and filtered.
-#if STEAMAUDIO_ENABLED && !UNITY_WEBGL
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Web: Unity's web audio has no spatializer plugins or filters, so the page (WebGLTemplates/StillHere) switches
+        // the browser's own 3D panners to HRTF. Distance stays ours (Unity sets the panners' rolloff to 0).
+        [System.Runtime.InteropServices.DllImport("__Internal")] static extern int SH_BrowserHrtf();
+        static int browserHrtf = -1;
+        public static bool Hrtf { get { if (browserHrtf < 0) { try { browserHrtf = SH_BrowserHrtf(); } catch { browserHrtf = 0; } } return browserHrtf == 1; } }
+        public static string HrtfSource => Hrtf ? "browser HRTF" : "panning";
+#elif STEAMAUDIO_ENABLED
         public static bool Hrtf => AudioSettings.GetSpatializerPluginName().Contains("Steam Audio");
+        public static string HrtfSource => Hrtf ? "Steam Audio HRTF" : "panning";
 #else
-        public static bool Hrtf => false;      // Steam Audio is not available here (e.g. web builds): pan + filter instead
+        public static bool Hrtf => false;
+        public static string HrtfSource => "panning";
 #endif
         public bool silent;                     // headless simulation: no sound, lines are only logged
         public float ambience = 1;              // faded to 0 at the ending
@@ -67,7 +76,7 @@ namespace StillHere
                 string g = c.name.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9');
                 if (g != c.name) { if (!groups.TryGetValue(g, out var l)) groups[g] = l = new List<string>(); l.Add(c.name); }
             }
-            { int rawN = 0; foreach (var l in audit) if (l.Contains("RAW") || l.Contains("EXCEPTION")) rawN++; Debug.Log($"[StillHere] audio ready: {sfx.Count} effects, {vo.Count} voice lines, hrtf={Hrtf}, unprepared clips={rawN}"); }
+            { int rawN = 0; foreach (var l in audit) if (l.Contains("RAW") || l.Contains("EXCEPTION")) rawN++; Debug.Log($"[StillHere] audio ready: {sfx.Count} effects, {vo.Count} voice lines, 3D audio={HrtfSource}, unprepared clips={rawN}"); }
             self = Make2D("self", 0); selfL = Make2D("selfL", -0.22f); selfR = Make2D("selfR", 0.22f);
             voice = Make2D("voice", 0); voice.reverbZoneMix = 0.12f; voice.priority = 0;
             var rz = gameObject.AddComponent<AudioReverbZone>();   // one small tiled room

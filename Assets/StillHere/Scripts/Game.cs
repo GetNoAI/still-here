@@ -82,7 +82,8 @@ namespace StillHere
         void Sfx(string id, Vector3 p, float vol = 1, float delay = 0, float pitch = 1) { au.Play(id, p, vol, pitch, delay); }
         void SelfSfx(string id, float vol = 1, int foot = 0, float delay = 0) { au.PlaySelf(id, vol, foot, delay); }
         void Muffle(float cutoff, float rate = 3) { earTarget = cutoff; earRate = rate; }
-        void Rumble(float strong, float weak = 0.2f, float secs = 0.15f) { input.Rumble(strong, weak, secs); }
+        /// Gamepad rumble plus a gentle phone haptic of the given feel.
+        void Rumble(float strong, float weak, float secs, Haptics.Feel feel) { input.Rumble(strong, weak, secs); Haptics.Play(feel); }
 
         // ------------------------------------------------------------------ boot
         void Awake()
@@ -123,7 +124,11 @@ namespace StillHere
         {
             input.Tick();
             if (!manual) Step(Mathf.Min(0.05f, Time.deltaTime));
+            // web debugging: add ?shdebug to the page address to log the game state every two seconds
+            if (debugLog && Time.unscaledTime > nextDebugLog) { nextDebugLog = Time.unscaledTime + 2; Debug.Log("[StillHere] " + State() + $" | touches={input.fingers.Count} touchSeen={input.touchSeen} 3D={AudioDirector.HrtfSource}"); }
         }
+        bool debugLog => Application.absoluteURL.Contains("shdebug");
+        float nextDebugLog;
 
         public void Step(float dt)
         {
@@ -142,9 +147,12 @@ namespace StillHere
 
             if (!manual && !au.silent)
             {
-                if (now >= nextTick) { tock = !tock; au.Play("clock", SrcClock, 1.8f, tock ? 0.93f : 1f, 0, 1.0f, 1.0f); nextTick += 1f; if (nextTick < now) nextTick = now + 1f; }
+                if (now >= nextTick) { tock = !tock; au.Play("clock", SrcClock, 1.8f * landmarkCalm, tock ? 0.93f : 1f, 0, 1.0f, 1.0f); nextTick += 1f; if (nextTick < now) nextTick = now + 1f; }
                 if (now >= nextDrip) { if (ambOn) au.Play("drip", SrcSink, 1.4f * au.ambience, Rand(0.92f, 1.08f), 0, 0.7f, 1.0f); nextDrip = now + Rand(1.3f, 2.8f); }
             }
+            // the clock and radiator sit low under the opening narration, then come up to full once you're on your feet
+            landmarkCalm = Mathf.MoveTowards(landmarkCalm, stage == "pre" || stage == "intro" || stage == "seated" ? 0.3f : 1f, dt / 20f);
+            if (radiatorLoop != null) radiatorLoop.baseVol = 1.4f * landmarkCalm;
             if (f.reach) Reach();
             UpdatePlayer(dt, f);
             foreach (var c in cats) UpdateCat(c, dt);
@@ -177,8 +185,9 @@ namespace StillHere
         // ------------------------------------------------------------------ landmark sounds
         public static readonly Vector3 SrcFridge = new Vector3(2.1f, 0.4f, 1.65f), SrcSink = new Vector3(-1.0f, 0.86f, 1.75f), SrcClock = new Vector3(2.45f, 1.9f, -0.3f),
             SrcKettle = new Vector3(0.7f, 1.0f, 1.7f), SrcDoor = new Vector3(-2.45f, 1.2f, -1.05f), SrcDoorLow = new Vector3(-2.45f, 0.05f, -1.05f), SrcRadiator = new Vector3(0, 0.5f, -1.9f);
-        AudioDirector.Emitter fridgeLoop;
+        AudioDirector.Emitter fridgeLoop, radiatorLoop;
         float nextTick, nextDrip; bool tock;
+        public float landmarkCalm = 0.3f;
         void StartAmbience()
         {
             fridgeLoop = au.Loop("fridge_hum", SrcFridge, 0.4f, 0.8f, 1.2f);
@@ -186,7 +195,7 @@ namespace StillHere
             au.Loop("kettle", SrcKettle, 0.45f, 0.4f, 1.3f);
             au.Loop("rain", SrcDoor, 0.7f, 0.9f, 1.1f);
             au.Loop("draught", SrcDoorLow, 0.4f, 0.7f, 1.2f);
-            au.Loop("radiator", SrcRadiator, 1.4f, 0.9f, 1.0f);      // the only fixed cue for Biscuit's bowl: keep it clear
+            radiatorLoop = au.Loop("radiator", SrcRadiator, 1.4f * landmarkCalm, 0.9f, 1.0f);      // the only fixed cue for Biscuit's bowl
             au.tableRect = new Vector4(-0.6f, -0.6f, 0.6f, 0.2f);
         }
 

@@ -160,7 +160,7 @@ namespace StillHere
             if (stage == "intro") { c.x = P.x + f.x * 0.42f - r.x * 0.36f * c.crossDir; c.z = P.z + f.y * 0.42f - r.y * 0.36f * c.crossDir; }
             c.h = Mathf.Atan2(r.x * c.crossDir, r.y * c.crossDir);
             c.lastRub = now; lastRubAny = now; c.purrHold = now + 6; c.rubShots = 3; c.nextShot = now;
-            au.Play("fur", c.Mouth, 1); Rumble(0.15f, 0.05f, 0.4f);
+            au.Play("fur", c.Mouth, 1); Rumble(0.15f, 0.05f, 0.4f, Haptics.Feel.Purr);
             CatMode(c, "cross");
             if (stage != "intro" && UnityEngine.Random.value < 0.55f) Say(Pick("rub_1", "rub_2", "rub_3", "rub_4"), 0);
         }
@@ -169,7 +169,7 @@ namespace StillHere
         {
             c.purrHold = now + 6; au.Play("fur", c.Mouth, 1); Meow(c, "mrrp", 0.2f);
             EmitCat(c, CatPose(c), new Vector3(c.x, c.y + 0.32f, c.z), 2.4f);
-            Rumble(0.1f, 0.05f, 0.5f);
+            Rumble(0.1f, 0.05f, 0.5f, Haptics.Feel.Purr);
             Talk("stroke" + c.idx, c.isB ? L("stroke_b_1", "stroke_b_2") : L("stroke_p_1", "stroke_p_2"), 1, 4);
         }
 
